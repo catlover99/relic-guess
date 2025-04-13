@@ -206,7 +206,7 @@ function App() {
 
       <Card className="w-[520px] font-semibold">
           <CardHeader className="text-3xl text-center">
-            <CardTitle>Artifact Info:</CardTitle>
+            <CardTitle>Artifact Info</CardTitle>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col justify-between space-y-3">
             {lockedIn ? (
