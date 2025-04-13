@@ -1,4 +1,5 @@
 // src/App.jsx
+import { Analytics } from "@vercel/analytics/react";
 import { useEffect, useState } from "react";
 import { MapContainer, TileLayer, useMapEvents, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
@@ -332,6 +333,7 @@ function App() {
           </CardContent>
         </Card>
       </div>
+      <Analytics />
     </div>
   );
 }
