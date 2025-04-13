@@ -172,9 +172,13 @@ function App() {
   if (!artifact) return <div className="p-4">Loading...</div>;
 
   return (
-    <div className="min-h-screen w-full">
+    <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden">
       <div className="relative z-0">
-        <MapContainer center={[20, 0]} zoom={2} style={{ height: "60vh", width: "100vw" }}>
+        <MapContainer 
+          center={[20, 0]} 
+          zoom={2} 
+          className="h-[40vh] md:h-[60vh] w-full"
+        >
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution="&copy; OpenStreetMap contributors"
@@ -202,16 +206,15 @@ function App() {
         </MapContainer>
       </div>
 
-      <div className="font-semibold relative z-10 flex flex-row flex-wrap justify-center items-start gap-10 px-10 py-16 w-full bg-gray-100">
-
-      <Card className="w-[520px] font-semibold">
-          <CardHeader className="text-3xl text-center">
+      <div className="font-semibold relative z-10 flex flex-col md:flex-row flex-wrap justify-center items-center gap-4 md:gap-10 px-4 md:px-10 py-8 md:py-16 w-full bg-gray-100">
+        <Card className={`w-full md:w-[520px] font-semibold ${lockedIn ? 'order-2' : 'order-3'}`}>
+          <CardHeader className="text-2xl md:text-3xl text-center">
             <CardTitle>Artifact Info</CardTitle>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col justify-between space-y-3">
             {lockedIn ? (
               <>
-                <p className="text-gray-700 text-2xl">{artifact.label}</p>
+                <p className="text-gray-700 text-xl md:text-2xl">{artifact.label}</p>
                 <p className="text-sm mt-2">{summary}</p>
                 <p className="text-sm">Discovered in: {artifact.discoverySiteLabel}</p>
                 <a
@@ -227,17 +230,17 @@ function App() {
           </CardContent>
         </Card>
 
-        <Card className="w-[520px]">
+        <Card className={`w-full md:w-[520px] ${lockedIn ? 'order-3' : 'order-1'}`}>
           <CardHeader className="text-center">
             {!lockedIn && guess && (
               <button
-                className="mb-4 px-6 py-2 bg-green-600 text-white rounded-lg shadow hover:bg-green-700"
+                className="mb-4 px-6 py-2 bg-green-600 text-white rounded-lg shadow hover:bg-green-700 w-full md:w-auto"
                 onClick={lockInGuess}
               >
                 Lock In Guess
               </button>
             )}
-            <CardTitle className="text-3xl tracking-tight">Estimated Year: {artifact.year}</CardTitle>
+            <CardTitle className="text-2xl md:text-3xl tracking-tight">Estimated Year: {artifact.year}</CardTitle>
           </CardHeader>
           <CardContent className="text-center flex-1 flex flex-col justify-between">
             <div className="w-full flex justify-center">
@@ -252,7 +255,7 @@ function App() {
             </div>
             {!lockedIn && guess && (
               <button
-                className="mt-4 px-6 py-2 bg-green-600 text-white rounded-lg shadow hover:bg-green-700"
+                className="mt-4 px-6 py-2 bg-green-600 text-white rounded-lg shadow hover:bg-green-700 w-full md:w-auto"
                 onClick={lockInGuess}
               >
                 Lock In Guess
@@ -261,58 +264,60 @@ function App() {
           </CardContent>
         </Card>
 
-        <Card className="w-[520px] font-semibold">
-          <CardHeader className="text-3xl text-center">
+        <Card className={`w-full md:w-[520px] font-semibold ${lockedIn ? 'order-1' : 'order-2'}`}>
+          <CardHeader className="text-2xl md:text-3xl text-center">
             <CardTitle>Results</CardTitle>
           </CardHeader>
           <CardContent className="text-center space-y-4">
             {lockedIn ? (
               <>
-                <p className="text-xl font-semibold">You were {distance} km away.</p>
+                <p className="text-lg md:text-xl font-semibold">You were {distance} km away.</p>
                 <motion.p
                   key={roundPoints}
                   initial={{ scale: 0.5, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ duration: 0.4 }}
-                  className="text-lg text-green-700 !important"
+                  className="text-base md:text-lg text-green-700 !important"
                 >
                   Points this round: {roundPoints}
                 </motion.p>
-                <p className="text-blue-600 text-lg font-bold">Total Score: {score}</p>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Artifact</TableHead>
-                      <TableHead>Discovered In</TableHead>
-                      <TableHead>Distance (km)</TableHead>
-                      <TableHead>Points</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rounds.map((r, i) => (
-                      <TableRow key={i}>
-                        <TableCell>
-                          <a
-                            href={r.wikipedia}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-blue-600 underline"
-                          >
-                            {r.label.length > 20 ? `${r.label.slice(0, 20)}...` : r.label}
-                          </a>
-                        </TableCell>
-                        <TableCell>
-                          {r.discovered.length > 18 ? `${r.discovered.slice(0, 18)}...` : r.discovered}
-                        </TableCell>
-                        <TableCell>{r.distance}</TableCell>
-                        <TableCell>{r.points}</TableCell>
+                <p className="text-blue-600 text-base md:text-lg font-bold">Total Score: {score}</p>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Artifact</TableHead>
+                        <TableHead>Discovered In</TableHead>
+                        <TableHead>Distance (km)</TableHead>
+                        <TableHead>Points</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {rounds.map((r, i) => (
+                        <TableRow key={i}>
+                          <TableCell>
+                            <a
+                              href={r.wikipedia}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-blue-600 underline"
+                            >
+                              {r.label.length > 20 ? `${r.label.slice(0, 20)}...` : r.label}
+                            </a>
+                          </TableCell>
+                          <TableCell>
+                            {r.discovered.length > 18 ? `${r.discovered.slice(0, 18)}...` : r.discovered}
+                          </TableCell>
+                          <TableCell>{r.distance}</TableCell>
+                          <TableCell>{r.points}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
                 {rounds.length < 10 ? (
                   <button
-                    className="mt-2 px-6 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700"
+                    className="mt-2 px-6 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 w-full md:w-auto"
                     onClick={nextArtifact}
                   >
                     Next Artifact
@@ -321,7 +326,7 @@ function App() {
                   <>
                     <p className="text-green-700 font-bold">Game Over! Final Score: {score}</p>
                     <button
-                      className="mt-2 px-6 py-2 bg-red-600 text-white rounded-lg shadow hover:bg-red-700"
+                      className="mt-2 px-6 py-2 bg-red-600 text-white rounded-lg shadow hover:bg-red-700 w-full md:w-auto"
                       onClick={restartGame}
                     >
                       Restart Game
