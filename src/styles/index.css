@@ -1,0 +1,485 @@
+@import 'tailwindcss';
+
+/*
+ * Explicit source globs.
+ *
+ * Tailwind v4 normally discovers templates itself, but its crawler produced an
+ * empty candidate set for this project — the working tree lives on a mounted
+ * Windows filesystem, where the Rust-based scanner silently finds no files and
+ * every utility class is dropped from the output. Declaring the sources removes
+ * the dependency on that discovery entirely, and costs nothing where it does work.
+ *
+ * Paths are relative to this file.
+ */
+@source "../../index.html";
+@source "../**/*.{ts,tsx}";
+
+/* ==================================================================
+   Relic — design tokens
+
+   Visual identity: "field notes from a dig". The palette is built from
+   oxidised bronze (verdigris) and terracotta against warm paper, which reads as
+   archaeology without resorting to parchment textures or sepia. Surfaces stay
+   clean and high-contrast so the artifact photograph is always the brightest,
+   most saturated thing on screen.
+
+   Every colour is defined here on `:root` in light form, then overridden in
+   exactly two places (system-dark and explicit-dark) so a token can never be
+   undefined in one theme.
+   ================================================================== */
+
+@theme {
+  /* -- Typography ------------------------------------------------- */
+  /* Display face is a serif for museum-label character. Both stacks are
+     system-resident: no webfont request, no FOUT, no layout shift. */
+  --font-display: Georgia, 'Iowan Old Style', 'Palatino Linotype', Palatino, serif;
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Fluid type scale. Clamps keep headings readable at 360px without a
+     media query and stop them dominating a 1920px viewport. */
+  --text-2xs: 0.6875rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-lg: 1.0625rem;
+  --text-xl: clamp(1.125rem, 0.9rem + 0.7vw, 1.375rem);
+  --text-2xl: clamp(1.375rem, 1.05rem + 1.2vw, 1.875rem);
+  --text-3xl: clamp(1.75rem, 1.2rem + 2.2vw, 2.75rem);
+  --text-4xl: clamp(2.125rem, 1.2rem + 4vw, 4rem);
+
+  /* -- Radii & elevation ------------------------------------------ */
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.25rem;
+  --radius-full: 999px;
+
+  /* -- Motion ----------------------------------------------------- */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --duration-fast: 140ms;
+  --duration-base: 240ms;
+  --duration-slow: 420ms;
+
+  /* -- Layout ----------------------------------------------------- */
+  --size-topbar: 3.25rem;
+  --size-touch: 2.75rem; /* 44px — minimum interactive target */
+  --width-panel: 25rem;
+  --width-panel-wide: 28rem;
+
+  /* Breakpoints. `lg` is the single structural break: below it the game is a
+     vertical stack, at and above it a side-by-side split. */
+  --breakpoint-xs: 26.75rem; /* 428px — large phones */
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem; /* 768px — tablets */
+  --breakpoint-lg: 64rem; /* 1024px — split layout */
+  --breakpoint-xl: 80rem;
+  --breakpoint-2xl: 96rem;
+}
+
+:root {
+  /* Neutrals carry a faint green cast so they sit with the verdigris brand
+     instead of looking like a separate grey system. */
+  --paper: #f6f4ef;
+  --surface: #ffffff;
+  --surface-2: #f0eee8;
+  --surface-3: #e5e3db;
+  --surface-inset: #eceae3;
+
+  --ink: #151d1b;
+  --ink-2: #3c4744;
+  /* 4.94:1 on white but only 4.05:1 on brand-soft; darkened so every surface in
+     the system clears AA for the small print that uses it. */
+  --ink-3: #56635f;
+  --ink-inverse: #f7f9f8;
+
+  --line: #d9d7cd;
+  --line-strong: #bdbcb1;
+
+  /* Verdigris — oxidised bronze. The brand and the "correct origin" colour. */
+  --brand: #0d5c52;
+  --brand-hover: #0a4b43;
+  --brand-soft: #dcece8;
+  --brand-ink: #ffffff;
+
+  /* Terracotta — secondary accent for highlights and hints. */
+  --accent: #a44b23;
+  --accent-soft: #f8e6dc;
+
+  /*
+   * Gold — reserved exclusively for score. Darker than it looks like it should
+   * be: the score is rendered at 18px semibold, which WCAG counts as normal text
+   * (large text needs 18.66px bold or 24px), so it must clear 4.5:1 against the
+   * white surface, the warm paper *and* the brand-soft reveal header. 4.5:1 at
+   * #9a7314 was 4.34 — a real failure, not a rounding one.
+   */
+  --gold: #7f5c10;
+  --gold-soft: #f7edd2;
+
+  /* Indigo — the player's guess. Deliberately far from verdigris in hue *and*
+     lightness so the two markers differ for red-green colour blindness. */
+  --guess: #3f3fb0;
+  --guess-soft: #e4e4f7;
+
+  --origin: #0d5c52;
+  --origin-soft: #dcece8;
+
+  --good: #1c7048;
+  --warn: #8a6100;
+  --bad: #a52f23;
+
+  --focus: #2d6ef5;
+  --shadow-color: 158 30% 12%;
+
+  --shadow-sm: 0 1px 2px hsl(var(--shadow-color) / 0.06), 0 1px 1px hsl(var(--shadow-color) / 0.04);
+  --shadow-md:
+    0 2px 4px hsl(var(--shadow-color) / 0.06), 0 6px 16px -4px hsl(var(--shadow-color) / 0.1);
+  --shadow-lg:
+    0 4px 8px hsl(var(--shadow-color) / 0.07), 0 16px 40px -8px hsl(var(--shadow-color) / 0.16);
+  --shadow-panel:
+    0 1px 0 hsl(var(--shadow-color) / 0.05), 0 8px 32px -12px hsl(var(--shadow-color) / 0.14);
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --paper: #0c1211;
+    --surface: #141d1b;
+    --surface-2: #1b2523;
+    --surface-3: #26312e;
+    --surface-inset: #101817;
+
+    --ink: #e9efed;
+    --ink-2: #b4c0bd;
+    --ink-3: #869390;
+    --ink-inverse: #0c1211;
+
+    --line: #2a3532;
+    --line-strong: #3b4744;
+
+    --brand: #4bbfab;
+    --brand-hover: #63d2be;
+    --brand-soft: #14302c;
+    --brand-ink: #06201c;
+
+    --accent: #e08a5c;
+    --accent-soft: #332016;
+
+    --gold: #d8b45f;
+    --gold-soft: #2e2513;
+
+    --guess: #8f8fee;
+    --guess-soft: #1e1e3d;
+
+    --origin: #4bbfab;
+    --origin-soft: #14302c;
+
+    --good: #52c08a;
+    --warn: #d9a63c;
+    --bad: #f08579;
+
+    --focus: #7aa5ff;
+    --shadow-color: 160 40% 2%;
+
+    color-scheme: dark;
+  }
+}
+
+[data-theme='dark'] {
+  --paper: #0c1211;
+  --surface: #141d1b;
+  --surface-2: #1b2523;
+  --surface-3: #26312e;
+  --surface-inset: #101817;
+
+  --ink: #e9efed;
+  --ink-2: #b4c0bd;
+  --ink-3: #869390;
+  --ink-inverse: #0c1211;
+
+  --line: #2a3532;
+  --line-strong: #3b4744;
+
+  --brand: #4bbfab;
+  --brand-hover: #63d2be;
+  --brand-soft: #14302c;
+  --brand-ink: #06201c;
+
+  --accent: #e08a5c;
+  --accent-soft: #332016;
+
+  --gold: #d8b45f;
+  --gold-soft: #2e2513;
+
+  --guess: #8f8fee;
+  --guess-soft: #1e1e3d;
+
+  --origin: #4bbfab;
+  --origin-soft: #14302c;
+
+  --good: #52c08a;
+  --warn: #d9a63c;
+  --bad: #f08579;
+
+  --focus: #7aa5ff;
+  --shadow-color: 160 40% 2%;
+
+  color-scheme: dark;
+}
+
+/* Expose the tokens as Tailwind utilities (bg-surface, text-ink-2, …). */
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-surface-inset: var(--surface-inset);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-inverse: var(--ink-inverse);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-ink: var(--brand-ink);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-gold: var(--gold);
+  --color-gold-soft: var(--gold-soft);
+  --color-guess: var(--guess);
+  --color-guess-soft: var(--guess-soft);
+  --color-origin: var(--origin);
+  --color-origin-soft: var(--origin-soft);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+  --color-focus: var(--focus);
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-panel: var(--shadow-panel);
+}
+
+/* ==================================================================
+   Base
+   ================================================================== */
+
+*,
+*::before,
+*::after {
+  border-color: var(--line);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  /* Prevents iOS Safari from rubber-banding the whole document while the user
+     drags the map. */
+  overscroll-behavior: none;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior: none;
+}
+
+#root {
+  min-height: 100dvh;
+  isolation: isolate;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  margin: 0;
+  text-wrap: balance;
+}
+
+p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+/* Scores and distances must not jitter as digits change. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* ==================================================================
+   Focus
+
+   A single visible ring for every interactive element, applied on
+   :focus-visible so pointer users never see it but keyboard users always do.
+   ================================================================== */
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* Leaflet clears outlines on its own controls; restore them. */
+.leaflet-container a:focus-visible,
+.leaflet-container button:focus-visible {
+  outline: 2px solid var(--focus) !important;
+  outline-offset: 2px;
+}
+
+/* Dialog entrance, used by the image viewer. */
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    scale: 0.97;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+/* ==================================================================
+   Accessibility helpers
+   ================================================================== */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.skip-link {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 100;
+  padding: 0.625rem 1rem;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-200%);
+  transition: transform var(--duration-fast) var(--ease-out-quint);
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+/* ==================================================================
+   Utilities
+   ================================================================== */
+
+/* Safe-area insets, so nothing sits under a notch or a home indicator. */
+.pad-safe-top {
+  padding-top: max(0px, env(safe-area-inset-top));
+}
+.pad-safe-bottom {
+  padding-bottom: max(0px, env(safe-area-inset-bottom));
+}
+.pad-safe-x {
+  padding-left: max(0px, env(safe-area-inset-left));
+  padding-right: max(0px, env(safe-area-inset-right));
+}
+
+/* Shimmer for loading placeholders. */
+.skeleton {
+  background: linear-gradient(
+      90deg,
+      var(--surface-2) 0%,
+      var(--surface-3) 40%,
+      var(--surface-2) 80%
+    )
+    0 0 / 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.scroll-panel {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+.scroll-panel::-webkit-scrollbar {
+  width: 10px;
+}
+.scroll-panel::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: var(--radius-full);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+/* Faint stratigraphic banding for the landing screen: an archaeology cue that
+   costs no assets and stays out of the way of text. */
+.strata-bg {
+  background-image:
+    radial-gradient(
+      120% 80% at 50% -10%,
+      color-mix(in srgb, var(--brand) 12%, transparent) 0%,
+      transparent 60%
+    ),
+    repeating-linear-gradient(
+      178deg,
+      transparent 0 38px,
+      color-mix(in srgb, var(--ink) 4%, transparent) 38px 39px
+    );
+}
+
+/* ==================================================================
+   Reduced motion
+
+   Anything decorative stops; anything that communicates state (the reveal
+   line, the marker drop) collapses to its end state rather than disappearing.
+   ================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .marker-halo {
+    display: none;
+  }
+  .skeleton {
+    animation: none;
+  }
+  .reveal-line {
+    stroke-dasharray: 6 8;
+    opacity: 1;
+  }
+}

@@ -1,0 +1,212 @@
+/*
+ * Map styling.
+ *
+ * Kept in its own stylesheet, imported by GameMap *after* `leaflet.css`, for two
+ * reasons:
+ *
+ * 1. **Cascade order.** Leaflet sets `.leaflet-container { background: #ddd }` and
+ *    sizes its controls; overriding those from the global stylesheet loses,
+ *    because the global sheet is in the entry chunk and Leaflet's arrives later
+ *    with the lazily-loaded map. Same specificity, later wins.
+ * 2. **Bundle size.** Both files stay in the map chunk, so the landing page ships
+ *    neither.
+ *
+ * It uses only plain custom properties, all of which the global stylesheet
+ * publishes on `:root`, so it needs no Tailwind directives of its own.
+ */
+
+/* ==================================================================
+   Map
+
+   Leaflet ships opinionated light styling; these rules make it a citizen of
+   the design system in both themes.
+   ================================================================== */
+
+.leaflet-container {
+  background: var(--surface-inset);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  /* The map is the primary touch surface: never let a drag scroll the page. */
+  touch-action: none;
+  outline: none;
+}
+
+/*
+ * Guessing cursor.
+ *
+ * Scoped from the wrapper rather than the container, because React must not own
+ * any conditional class on the element Leaflet manages. `.leaflet-grab` is
+ * included because Leaflet sets its own cursor on the drag pane, which would
+ * otherwise win over an inherited one.
+ */
+.is-guessing .leaflet-container,
+.is-guessing .leaflet-grab {
+  cursor: crosshair;
+}
+
+/**
+ * Dark-mode raster tiles.
+ *
+ * OSM publishes only a light style, so dark mode inverts it. The hue rotation
+ * restores water to blue after the inversion, and the reduced saturation and
+ * contrast stop the result glowing against the dark chrome. Markers and the
+ * distance line live in other panes and are deliberately not filtered.
+ */
+.tiles-inverted .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.86) saturate(0.62);
+}
+
+.leaflet-control-attribution {
+  background: color-mix(in srgb, var(--surface) 88%, transparent) !important;
+  color: var(--ink-3) !important;
+  font-size: var(--text-2xs) !important;
+  padding: 2px 6px !important;
+  border-radius: var(--radius-xs) 0 0 0;
+}
+.leaflet-control-attribution a {
+  color: var(--ink-2) !important;
+  text-decoration: underline;
+}
+
+.leaflet-bar {
+  border: 1px solid var(--line) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-md) !important;
+  overflow: hidden;
+}
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  width: var(--size-touch) !important;
+  height: var(--size-touch) !important;
+  line-height: var(--size-touch) !important;
+  background: var(--surface) !important;
+  color: var(--ink) !important;
+  border-bottom-color: var(--line) !important;
+  font-size: 1.125rem;
+}
+.leaflet-bar a:hover {
+  background: var(--surface-2) !important;
+}
+.leaflet-bar a.leaflet-disabled {
+  background: var(--surface-2) !important;
+  color: var(--ink-3) !important;
+}
+
+/* ---- Markers -----------------------------------------------------
+   Roles are encoded three ways so colour is never the only signal:
+   shape (pin vs. flag), fill pattern (hollow/dashed vs. solid), and a glyph
+   ("?" for a guess, a trowel for the true origin).
+   ---------------------------------------------------------------- */
+
+.marker-root {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.marker-pin {
+  filter: drop-shadow(0 3px 5px hsl(var(--shadow-color) / 0.35));
+}
+
+.marker-guess .marker-pin {
+  color: var(--guess);
+}
+.marker-origin .marker-pin {
+  color: var(--origin);
+}
+
+/* Drop-in animation for the origin marker on reveal. */
+.marker-origin .marker-pin {
+  animation: marker-drop var(--duration-slow) var(--ease-spring) both;
+}
+
+@keyframes marker-drop {
+  from {
+    transform: translateY(-40%) scale(0.7);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+/* Pulsing halo that draws the eye to the revealed origin. */
+.marker-halo {
+  position: absolute;
+  inset: auto auto 0 50%;
+  width: 2.5rem;
+  height: 2.5rem;
+  translate: -50% 50%;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--origin);
+  opacity: 0;
+  animation: halo 2.4s var(--ease-out-quint) 0.3s 2;
+}
+
+@keyframes halo {
+  0% {
+    scale: 0.35;
+    opacity: 0.85;
+  }
+  100% {
+    scale: 1.9;
+    opacity: 0;
+  }
+}
+
+/* The guess marker is grabbable while the round is live. */
+.marker-guess.is-draggable {
+  cursor: grab;
+}
+.marker-guess.is-draggable:active {
+  cursor: grabbing;
+}
+
+/* Animated great-circle line between the two markers. */
+.reveal-line {
+  stroke-dasharray: 6 8;
+  animation: line-draw var(--duration-slow) var(--ease-out-quint) both;
+}
+.reveal-line-shadow {
+  stroke-dasharray: none;
+}
+
+@keyframes line-draw {
+  from {
+    opacity: 0;
+    stroke-dashoffset: 40;
+  }
+  to {
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Distance badge anchored to the midpoint of the line. */
+.distance-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-full);
+  background: var(--ink);
+  color: var(--ink-inverse);
+  font-size: var(--text-2xs);
+  font-weight: 650;
+  white-space: nowrap;
+  box-shadow: var(--shadow-md);
+  font-variant-numeric: tabular-nums;
+}
+
+.leaflet-tooltip.distance-tooltip {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+.leaflet-tooltip.distance-tooltip::before {
+  display: none;
+}

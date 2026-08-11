@@ -1,0 +1,8 @@
+# Generated data bundle: pretty-printing it triples the transfer size.
+public/data/artifacts.json
+
+dist
+.cache
+playwright-report
+test-results
+package-lock.json

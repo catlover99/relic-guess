@@ -2,29 +2,63 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      `viewport-fit=cover` lets the layout extend under a notch; the safe-area
+      padding utilities then keep content clear of it. `maximum-scale` is
+      deliberately NOT set: capping zoom is an accessibility failure.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f6f4ef" />
+    <!--
+      The OSM tile usage policy requires a valid Referer from web pages, so the
+      referrer policy must stay permissive enough to send the origin.
+    -->
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+
     <link rel="icon" type="image/png" href="/favicon.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Relic Geo Guess</title>
+    <link rel="apple-touch-icon" href="/favicon.png" />
 
-    <!-- Basic meta -->
-    <meta name="description" content="Guess where ancient artifacts were found. A geography + archaeology game.">
+    <title>Relic — guess where ancient artifacts came from</title>
+    <meta
+      name="description"
+      content="A geography game for history lovers. Study a photograph of an ancient object, drop a pin where you think it came from, and learn what it is."
+    />
 
-    <!-- Open Graph (used by Discord, Facebook) -->
-    <meta property="og:title" content="RelicGuess – Artifact Location Game" />
-    <meta property="og:description" content="Guess the discovery sites of ancient artifacts based on their images. Test your archaeological intuition!" />
+    <!-- Warm up the tile and image hosts before the map mounts. -->
+    <link rel="preconnect" href="https://tile.openstreetmap.org" crossorigin />
+    <link rel="dns-prefetch" href="https://images.metmuseum.org" />
+    <link rel="dns-prefetch" href="https://upload.wikimedia.org" />
+    <link rel="dns-prefetch" href="https://openaccess-cdn.clevelandart.org" />
+    <link rel="dns-prefetch" href="https://www.artic.edu" />
+    <!-- The artifact bundle is needed immediately after hydration. -->
+    <link rel="preload" href="/data/artifacts.json" as="fetch" crossorigin />
+
+    <meta property="og:title" content="Relic — guess where ancient artifacts came from" />
+    <meta
+      property="og:description"
+      content="Study a photograph of an ancient object, drop a pin where you think it came from, and learn what it is."
+    />
     <meta property="og:image" content="https://www.relicguess.com/og-image.png" />
     <meta property="og:url" content="https://www.relicguess.com" />
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Relic" />
 
-    <!-- Twitter Card -->
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="RelicGuess – Artifact Location Game">
-    <meta name="twitter:description" content="Guess the discovery sites of ancient artifacts based on their images.">
-    <meta name="twitter:image" content="https://www.relicguess.com/og-image.png">
-
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Relic — guess where ancient artifacts came from" />
+    <meta
+      name="twitter:description"
+      content="Study a photograph of an ancient object, drop a pin where you think it came from, and learn what it is."
+    />
+    <meta name="twitter:image" content="https://www.relicguess.com/og-image.png" />
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <noscript>
+      <p style="padding: 2rem; font-family: system-ui, sans-serif">
+        Relic is an interactive map game and needs JavaScript enabled to run.
+      </p>
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

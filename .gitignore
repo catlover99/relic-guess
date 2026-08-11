@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Ingestion caches and gazetteer dumps
+.cache
+
+# Playwright
+playwright-report
+test-results
