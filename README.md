@@ -94,6 +94,7 @@ records what was integrated, what was rejected, and why.
 ```bash
 export INGEST_CONTACT="you@example.com"   # required by Wikimedia's User-Agent policy
 npm run ingest                            # ~5.8 MB bundle, ~3,500 artifacts
+npm run basemap                           # rebuild the map from Natural Earth
 npm run ingest -- --dry                   # report only
 npm run ingest -- --provider=cma --limit=300
 ```

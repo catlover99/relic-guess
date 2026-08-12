@@ -17,6 +17,7 @@ import type { ProviderAdapter } from './lib/provider.js';
 import { dedupe } from './lib/dedupe.js';
 import { rejectArtifact } from './lib/quality.js';
 import { verifyArtifactImages } from './lib/verifyImages.js';
+import { attachHeartlands } from './lib/heartland.js';
 import { TIER_PROFILE } from './lib/geoTiers.js';
 import { metProvider } from './providers/met.js';
 import { aicProvider } from './providers/aic.js';
@@ -127,7 +128,7 @@ async function main(): Promise<void> {
 
   /* ---- Filter ---------------------------------------------------- */
   const rejections = new Map<string, number>();
-  const passed: Artifact[] = [];
+  let passed: Artifact[] = [];
   for (const artifact of harvested) {
     const reason = rejectArtifact(artifact);
     if (reason) {
@@ -142,6 +143,23 @@ async function main(): Promise<void> {
     20,
   );
   console.log(`\n${passed.length} records passed quality filtering.`);
+
+  /* ---- Cultural homelands ---------------------------------------- */
+  /*
+   * Runs for every artifact, including the ones that already have a precise
+   * findspot. That is the point: the reveal has to be able to show where an
+   * object was dug up *and* the region its culture occupied, which the old
+   * culture-as-last-resort behaviour made impossible.
+   */
+  const heartlands = attachHeartlands(passed);
+  passed = heartlands.artifacts;
+  console.log(
+    `\nCultural homelands: ${heartlands.stats.attached} attached` +
+      ` (${heartlands.stats.distinct} meaningfully apart from the object's own place)` +
+      `, ${heartlands.stats.unmatched} cultures not in the table` +
+      `, ${heartlands.stats.noCulture} without a culture` +
+      `, ${heartlands.stats.implausible} rejected as implausibly far.`,
+  );
 
   /* ---- Verify photographs ---------------------------------------- */
   /*

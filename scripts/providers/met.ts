@@ -328,6 +328,9 @@ async function normalize(
     material: tidyMaterial(object.medium),
     objectType: object.classification?.trim() || object.objectName?.trim() || null,
     origin,
+    // Attached centrally by the ingest once the final origin is known, so the
+    // implausible-drift check can compare the two. See lib/heartland.ts.
+    heartland: null,
     /*
      * The Met's public API exposes no narrative description, so the reveal leans on
      * its structured fields. `excavation` is the best of them ("MMA excavations,

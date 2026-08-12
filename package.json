@@ -17,7 +17,8 @@
     "ingest": "tsx scripts/ingest.ts",
     "verify": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build",
     "test:e2e:dev": "PW_TARGET=dev playwright test",
-    "audit": "tsx scripts/audit.ts"
+    "audit": "tsx scripts/audit.ts",
+    "basemap": "tsx scripts/basemap.ts"
   },
   "dependencies": {
     "@vercel/analytics": "^1.5.0",

@@ -39,11 +39,20 @@ export function ScoreReveal({
   breakdown,
   guess,
   origin,
+  regionIsHeartland = false,
   className,
 }: {
   breakdown: ScoreBreakdown;
   guess: GeoPoint;
   origin: OriginPlace;
+  /**
+   * Whether the guess was graded against a cultural homeland.
+   *
+   * Changes what the forgiven radius *means*: on Heartland it is the width of the
+   * region a culture occupied, not a statement about how vague the museum's
+   * record is — and most of those records are precise.
+   */
+  regionIsHeartland?: boolean;
   className?: string;
 }) {
   const animated = useCountUp(breakdown.score);
@@ -103,17 +112,41 @@ export function ScoreReveal({
         />
       </div>
 
-      {/* Only shown when the source coordinate is imprecise enough for the
-          tolerance to have mattered — otherwise it is noise. */}
+      {/*
+        Why part of the distance was forgiven — and which of the two reasons it
+        was. "The museum's record is vague" and "this mode only asks for the
+        region" are different statements, and using the first for both would be
+        simply untrue on Heartland, where most origins are precisely recorded.
+      */}
       {breakdown.toleranceKm > 0 && breakdown.distanceKm > 0 && (
         <p className="flex items-start gap-1.5 text-xs text-ink-3">
           <Target size={13} className="mt-0.5 shrink-0" aria-hidden />
           <span>
-            This origin is recorded only to about {formatDistance(breakdown.toleranceKm)}, so that
-            much of the distance was not counted against you.
+            {regionIsHeartland
+              ? `Anywhere within ${roundedKm(
+                  breakdown.toleranceKm,
+                )} of the heartland counted as on the spot.`
+              : breakdown.toleranceSource === 'mode'
+                ? `This mode asks for the region, so anything within ${roundedKm(
+                    breakdown.toleranceKm,
+                  )} counts as on the spot.`
+                : `This origin is recorded only to about ${roundedKm(
+                    breakdown.toleranceKm,
+                  )}, so that much of the distance was not counted against you.`}
           </span>
         </p>
       )}
     </div>
   );
+}
+
+/**
+ * A tolerance radius, rounded to something that reads like an approximation.
+ *
+ * "about 399 km" is a strange thing to say; the number is a tier baseline, not a
+ * measurement.
+ */
+function roundedKm(km: number): string {
+  const step = km >= 200 ? 50 : km >= 50 ? 10 : 5;
+  return `${Math.round(km / step) * step} km`;
 }

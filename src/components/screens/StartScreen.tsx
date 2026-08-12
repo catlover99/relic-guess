@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, ChevronDown, Compass, Flame, Play, Trophy } from 'lucide-react';
-import { DIFFICULTIES, countEligible, type DifficultyId } from '@/game/selection';
+import {
+  DEFAULT_DIFFICULTY,
+  DIFFICULTIES,
+  countEligible,
+  type DifficultyId,
+} from '@/game/selection';
 import { ERAS, type EraId } from '@/game/eras';
 import { REGIONS, type RegionId } from '@/game/regions';
 import { formatScore, MAX_ROUND_SCORE } from '@/game/scoring';
@@ -42,7 +47,7 @@ export function StartScreen() {
   const sources = useGame((state) => state.sources);
   const startSession = useGame((state) => state.startSession);
 
-  const [difficulty, setDifficulty] = useState<DifficultyId>('scholar');
+  const [difficulty, setDifficulty] = useState<DifficultyId>(DEFAULT_DIFFICULTY);
   const [region, setRegion] = useState<RegionId | null>(null);
   const [era, setEra] = useState<EraId | null>(null);
   const [showFilters, setShowFilters] = useState(false);
@@ -57,7 +62,7 @@ export function StartScreen() {
   const canStart = eligible >= ROUNDS_PER_SESSION;
   const dailyDone = profile.daily?.date === todayKey();
   const best = profile.bests[difficulty] ?? 0;
-  const difficultyBlurb = DIFFICULTIES.find((option) => option.id === difficulty)?.blurb ?? '';
+  const selectedMode = DIFFICULTIES.find((option) => option.id === difficulty);
 
   return (
     <main className="strata-bg min-h-dvh pad-safe-x">
@@ -100,7 +105,7 @@ export function StartScreen() {
         <Panel className="p-4 sm:p-5">
           <fieldset>
             <legend className="mb-2 text-xs font-semibold tracking-[0.08em] text-ink-3 uppercase">
-              How much should we tell you?
+              How hard should it be?
             </legend>
             <div
               className="grid grid-cols-3 gap-1.5 rounded-lg bg-surface-2 p-1"
@@ -128,7 +133,9 @@ export function StartScreen() {
                 );
               })}
             </div>
-            <p className="mt-2 text-sm text-ink-2">{difficultyBlurb}</p>
+            <p className="mt-2 text-sm text-ink-2">{selectedMode?.blurb}</p>
+            {/* What counts as a right answer, in words a player already knows. */}
+            <p className="mt-1 text-sm text-ink-3">{selectedMode?.aim}</p>
           </fieldset>
 
           <div className="mt-4 space-y-3">

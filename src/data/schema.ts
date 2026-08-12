@@ -79,6 +79,41 @@ export interface OriginPlace extends GeoPoint {
   provenance?: OriginProvenance;
 }
 
+/**
+ * The cultural homeland a Heartland-mode round is scored against.
+ *
+ * Deliberately a *separate field* from `origin`, not another `OriginKind`. They
+ * are different geographic claims and an artifact can have both:
+ *
+ *   - `origin`    — where this object itself was found or made. The Venus de Milo
+ *                   was found on Milos.
+ *   - `heartland` — where the culture that produced it was centred. That is the
+ *                   Aegean Greek world, 205 km away and hundreds of km across.
+ *
+ * Conflating them is what the single-`origin` model did, and it forced a choice:
+ * either the reveal could say where an object was dug up, or it could explain the
+ * region the guess was graded against, never both.
+ */
+export interface HeartlandPlace extends GeoPoint {
+  /** "the Aegean Greek world", "the Moche north coast of Peru". */
+  label: string;
+  country: string | null;
+  /**
+   * Radius of the homeland in km.
+   *
+   * This is the region drawn on the reveal and the distance Heartland scoring
+   * forgives, so it describes a real cultural extent rather than a map circle
+   * chosen to look generous.
+   */
+  radiusKm: number;
+  /** The provider culture string this was resolved from, verbatim. */
+  culture: string;
+  /** 0–1, inherited from the culture table's tier. */
+  confidence: number;
+  /** Culture-table token that matched, e.g. "culture:attic". */
+  resolvedId: string;
+}
+
 export interface OriginProvenance {
   /** Which provider field the geography came from, e.g. "met.region", "met.culture". */
   source: string;
@@ -168,8 +203,21 @@ export interface Artifact {
   material: string | null;
   objectType: string | null;
 
-  /** The location the game asks the player to find. */
+  /**
+   * Where this object itself was found or made.
+   *
+   * Precise modes score against it, and it is the object's own location on the
+   * reveal — "found at", "made at" — never a statement about its culture.
+   */
   origin: OriginPlace;
+  /**
+   * Where the producing culture was centred, when the culture is one the curated
+   * table covers. Null otherwise, which is the common case.
+   *
+   * Heartland and Daily score against this when present; see game/geography.ts,
+   * which is the single place that decides what a round is graded against.
+   */
+  heartland: HeartlandPlace | null;
   /** Excavation or acquisition circumstances, e.g. "MMA excavations, 1926–28". */
   discovery: string | null;
   /** Where the object is held today. Never the answer; shown in the reveal. */
@@ -238,6 +286,18 @@ export function isValidArtifact(value: unknown): value is Artifact {
   if (!isFiniteNumber(o.confidence) || o.confidence < 0 || o.confidence > 1) return false;
   if (!isFiniteNumber(o.uncertaintyKm) || o.uncertaintyKm < 0) return false;
   if (!isNonEmptyString(o.label)) return false;
+
+  // `heartland` is optional, but a malformed one must not reach the map.
+  const h = a.heartland;
+  if (h !== null && h !== undefined) {
+    if (typeof h !== 'object') return false;
+    const hl = h as Record<string, unknown>;
+    if (!isFiniteNumber(hl.lat) || !isFiniteNumber(hl.lon)) return false;
+    if (hl.lat < -90 || hl.lat > 90 || hl.lon < -180 || hl.lon > 180) return false;
+    if (hl.lat === 0 && hl.lon === 0) return false;
+    if (!isFiniteNumber(hl.radiusKm) || hl.radiusKm <= 0) return false;
+    if (!isNonEmptyString(hl.label)) return false;
+  }
 
   return true;
 }

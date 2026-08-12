@@ -78,6 +78,98 @@ describe('scoreGuess', () => {
     expect(result.band).toBe('lost');
   });
 
+  /*
+   * The curve itself, pinned.
+   *
+   * These are the numbers the curve was chosen for — forgiving through the first
+   * few hundred kilometres, clearly graded across a continent, near zero on the
+   * far side of the world. A change here is a change to how the game feels, so it
+   * should fail loudly rather than drift.
+   */
+  it.each([
+    [0, 5000],
+    [50, 4975],
+    [100, 4936],
+    [250, 4782],
+    [500, 4462],
+    [750, 4107],
+    [1000, 3740],
+    [1500, 3027],
+    [2000, 2386],
+    [3000, 1391],
+    [5000, 391],
+    [10000, 8],
+    [15000, 0],
+  ])('scores a %i km miss at %i', (km, expected) => {
+    const target = origin();
+    // Move due north, where a degree of latitude is a constant ~111.19 km.
+    const result = scoreGuess({ lat: target.lat + km / 111.19, lon: target.lon }, target);
+    expect(result.score).toBeCloseTo(expected, -1);
+  });
+
+  it('is more forgiving than the curve it replaced at every distance', () => {
+    const target = origin();
+    const previous = (km: number) => 5000 * Math.exp(-km / 1500);
+    for (const km of [100, 250, 500, 1000, 2000, 3000]) {
+      const result = scoreGuess({ lat: target.lat + km / 111.19, lon: target.lon }, target);
+      expect(result.score).toBeGreaterThan(previous(km));
+    }
+  });
+
+  it('still separates an excellent guess from a merely good one', () => {
+    const target = origin();
+    const at = (km: number) =>
+      scoreGuess({ lat: target.lat + km / 111.19, lon: target.lon }, target).score;
+    // Being ten times closer has to be worth having.
+    expect(at(100) - at(1000)).toBeGreaterThan(1000);
+  });
+});
+
+describe('scoreGuess — mode tolerance', () => {
+  it('forgives the mode radius even when the coordinate is exact', () => {
+    // Heartland asks which region an object is from, so a guess 250 km from a
+    // precisely recorded findspot is a correct answer to the question asked.
+    const precise = origin({ tier: 'findspot', uncertaintyKm: 0 });
+    const result = scoreGuess({ lat: precise.lat + 250 / 111.19, lon: precise.lon }, precise, {
+      minToleranceKm: 300,
+    });
+    expect(result.score).toBe(MAX_ROUND_SCORE);
+    expect(result.toleranceKm).toBe(300);
+  });
+
+  it('says which of the two forgave the distance', () => {
+    const precise = origin({ tier: 'findspot', uncertaintyKm: 0 });
+    const coarse = origin({ tier: 'culture-region', uncertaintyKm: 380 });
+    const guess = { lat: 0, lon: 0 };
+
+    // Heartland over a precisely recorded findspot: the *mode* is being generous,
+    // and telling the player the museum's record is vague would be untrue.
+    expect(scoreGuess(guess, precise, { minToleranceKm: 300 }).toleranceSource).toBe('mode');
+    expect(scoreGuess(guess, coarse, { minToleranceKm: 300 }).toleranceSource).toBe('coordinate');
+    expect(scoreGuess(guess, precise).toleranceSource).toBe('none');
+  });
+
+  it('takes the larger of the mode floor and the coordinate uncertainty', () => {
+    const coarse = origin({ tier: 'culture-region', uncertaintyKm: 380 });
+    expect(scoreGuess({ lat: 0, lon: 0 }, coarse, { minToleranceKm: 300 }).toleranceKm).toBe(380);
+    expect(scoreGuess({ lat: 0, lon: 0 }, coarse, { minToleranceKm: 500 }).toleranceKm).toBe(500);
+  });
+
+  it('leaves Expert scored against the coordinate itself', () => {
+    const precise = origin({ uncertaintyKm: 0 });
+    const guess = { lat: precise.lat + 250 / 111.19, lon: precise.lon };
+    expect(scoreGuess(guess, precise, { minToleranceKm: 0 }).score).toBe(
+      scoreGuess(guess, precise).score,
+    );
+  });
+
+  it('cannot push a score above the maximum', () => {
+    const result = scoreGuess({ lat: 25.7188, lon: 32.6573 }, origin(), {
+      minToleranceKm: 5000,
+    });
+    expect(result.score).toBe(MAX_ROUND_SCORE);
+  });
+
   it('returns an integer score', () => {
     const result = scoreGuess({ lat: 30, lon: 30 }, origin());
     expect(Number.isInteger(result.score)).toBe(true);
@@ -98,11 +190,23 @@ describe('scoreBand', () => {
 
   it('orders bands by score', () => {
     expect(scoreBand(5000).id).toBe('bullseye');
-    expect(scoreBand(4200).id).toBe('excellent');
-    expect(scoreBand(3000).id).toBe('strong');
-    expect(scoreBand(1600).id).toBe('close');
+    expect(scoreBand(4500).id).toBe('excellent');
+    expect(scoreBand(3500).id).toBe('strong');
+    expect(scoreBand(2000).id).toBe('close');
     expect(scoreBand(500).id).toBe('far');
     expect(scoreBand(0).id).toBe('lost');
+  });
+
+  it('bands correspond to the distances they are named for', () => {
+    const target = origin();
+    const bandAt = (km: number) =>
+      scoreGuess({ lat: target.lat + km / 111.19, lon: target.lon }, target).band;
+    expect(bandAt(80)).toBe('bullseye');
+    expect(bandAt(400)).toBe('excellent');
+    expect(bandAt(1100)).toBe('strong');
+    expect(bandAt(2400)).toBe('close');
+    expect(bandAt(4500)).toBe('far');
+    expect(bandAt(9000)).toBe('lost');
   });
 });
 

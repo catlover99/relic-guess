@@ -26,8 +26,12 @@ interface MapHealth {
   visibility: string;
   opacity: string;
   panes: { map: boolean; tile: boolean; marker: boolean; overlay: boolean };
-  tileCount: number;
-  positionedTiles: number;
+  /** The canvas Leaflet's renderer draws the country shapes into. */
+  basemapCanvases: number;
+  basemapCanvasArea: number;
+  /** English country names, rendered as positioned marker icons. */
+  countryLabels: number;
+  positionedLabels: number;
   zoomControlVisible: boolean;
   mapInstances: number;
 }
@@ -37,7 +41,15 @@ async function mapHealth(page: Page): Promise<MapHealth> {
     const container = document.querySelector<HTMLElement>('.leaflet-container');
     const rect = container?.getBoundingClientRect();
     const style = container ? getComputedStyle(container) : null;
-    const tiles = Array.from(document.querySelectorAll<HTMLElement>('.leaflet-tile'));
+    /*
+     * The basemap is vector geometry on a canvas plus DOM labels, not raster
+     * tiles, so these are the nodes that vanish if Leaflet's container classes
+     * get wiped — the same signal the tile assertions used to provide.
+     */
+    const canvases = Array.from(
+      document.querySelectorAll<HTMLCanvasElement>('.leaflet-pane canvas'),
+    );
+    const labels = Array.from(document.querySelectorAll<HTMLElement>('.atlas-country-label'));
 
     return {
       containerExists: Boolean(container),
@@ -52,10 +64,20 @@ async function mapHealth(page: Page): Promise<MapHealth> {
         marker: Boolean(document.querySelector('.leaflet-marker-pane')),
         overlay: Boolean(document.querySelector('.leaflet-overlay-pane')),
       },
-      tileCount: tiles.length,
-      // A tile that lost its positioning is the visible symptom of the bug.
-      positionedTiles: tiles.filter((tile) => getComputedStyle(tile).position === 'absolute')
-        .length,
+      basemapCanvases: canvases.length,
+      basemapCanvasArea: Math.round(
+        canvases.reduce((max, canvas) => {
+          const box = canvas.getBoundingClientRect();
+          return Math.max(max, box.width * box.height);
+        }, 0),
+      ),
+      countryLabels: labels.length,
+      // A label whose marker lost its positioning is the visible symptom of the
+      // bug: the text still exists, stacked at the corner, instead of on a country.
+      positionedLabels: labels.filter((label) => {
+        const icon = label.closest<HTMLElement>('.leaflet-marker-icon');
+        return Boolean(icon) && getComputedStyle(icon!).position === 'absolute';
+      }).length,
       zoomControlVisible: (() => {
         const zoom = document.querySelector('.leaflet-control-zoom');
         if (!zoom) return false;
@@ -68,7 +90,30 @@ async function mapHealth(page: Page): Promise<MapHealth> {
   });
 }
 
-function expectHealthy(health: MapHealth, phase: string) {
+/**
+ * Health once the map has settled.
+ *
+ * Which country labels fit depends on the container's size, and the container is
+ * resized by React a frame or two after a round changes — a snapshot taken
+ * immediately measures the previous layout. The wait is best-effort: if labels
+ * never appear it falls through, and the assertions below report the real state
+ * rather than a timeout.
+ */
+async function settledHealth(page: Page): Promise<MapHealth> {
+  await page
+    .waitForFunction(() => document.querySelectorAll('.atlas-country-label').length > 0, null, {
+      timeout: 5_000,
+    })
+    .catch(() => {});
+  return mapHealth(page);
+}
+
+function expectHealthy(
+  health: MapHealth,
+  phase: string,
+  options: { requireLabels?: boolean } = {},
+) {
+  const { requireLabels = true } = options;
   expect(health.containerExists, `${phase}: .leaflet-container missing from the DOM`).toBe(true);
   expect(health.containerClasses, `${phase}: Leaflet's own classes were wiped`).toContain(
     'leaflet-container',
@@ -82,9 +127,22 @@ function expectHealthy(health: MapHealth, phase: string) {
   expect(health.panes.tile, `${phase}: tile pane missing`).toBe(true);
   expect(health.panes.marker, `${phase}: marker pane missing`).toBe(true);
   expect(health.panes.overlay, `${phase}: overlay pane missing`).toBe(true);
-  expect(health.tileCount, `${phase}: no tiles rendered`).toBeGreaterThan(0);
-  expect(health.positionedTiles, `${phase}: tiles lost absolute positioning`).toBe(
-    health.tileCount,
+  expect(health.basemapCanvases, `${phase}: basemap canvas missing`).toBeGreaterThan(0);
+  expect(health.basemapCanvasArea, `${phase}: basemap canvas has no area`).toBeGreaterThan(10000);
+  /*
+   * Label *presence* is asserted only where the world view guarantees anchors are
+   * on screen — a reveal zoomed onto open ocean legitimately has none, and which
+   * names fit is recomputed a frame after the layout settles, so it is not a
+   * reliable liveness signal at every phase. The canvas assertions above are the
+   * unconditional proof that the map survived; the positioning invariant below
+   * still applies to whatever labels do exist, which is what would break if
+   * Leaflet's classes were wiped.
+   */
+  if (requireLabels) {
+    expect(health.countryLabels, `${phase}: no country labels rendered`).toBeGreaterThan(0);
+  }
+  expect(health.positionedLabels, `${phase}: labels lost absolute positioning`).toBe(
+    health.countryLabels,
   );
   expect(health.zoomControlVisible, `${phase}: zoom control not visible`).toBe(true);
 }
@@ -93,22 +151,24 @@ test.describe('Leaflet map lifecycle', () => {
   test('the map survives guess, reveal and three round transitions', async ({ page }) => {
     await startGame(page);
     await expect(page.locator('.leaflet-container')).toBeVisible();
-    expectHealthy(await mapHealth(page), 'round 1 before guess');
+    expectHealthy(await settledHealth(page), 'round 1 before guess');
 
     for (const round of [1, 2, 3]) {
       // --- guessing ---
-      expectHealthy(await mapHealth(page), `round ${round} guessing`);
+      expectHealthy(await settledHealth(page), `round ${round} guessing`, { requireLabels: false });
 
       await placeGuess(page, round * 12 - 24, round * 10 - 20);
       await expect(page.locator('.marker-guess')).toHaveCount(1);
-      expectHealthy(await mapHealth(page), `round ${round} pin placed`);
+      expectHealthy(await settledHealth(page), `round ${round} pin placed`, {
+        requireLabels: false,
+      });
 
       // --- reveal: the exact transition that used to destroy the container ---
       await page.getByRole('button', { name: /lock in guess/i }).click();
       await expect(page.locator('.marker-origin')).toHaveCount(1);
 
       const revealed = await mapHealth(page);
-      expectHealthy(revealed, `round ${round} reveal`);
+      expectHealthy(revealed, `round ${round} reveal`, { requireLabels: false });
 
       // Both markers, the connecting line and the distance label must be present.
       await expect(page.locator('.marker-guess')).toHaveCount(1);
@@ -119,7 +179,9 @@ test.describe('Leaflet map lifecycle', () => {
       // --- advance --- (rounds 1–3 of 5, so the label is always "Next artifact")
       await page.getByRole('button', { name: /next artifact/i }).click();
       await expect(page.locator('.marker-origin')).toHaveCount(0);
-      expectHealthy(await mapHealth(page), `round ${round + 1} after advancing`);
+      expectHealthy(await settledHealth(page), `round ${round + 1} after advancing`, {
+        requireLabels: false,
+      });
     }
   });
 
@@ -145,7 +207,7 @@ test.describe('Leaflet map lifecycle', () => {
     expect(after.guessing).toBe(0);
     expect(after.wrapperHasClass).toBe(false);
     expect(after.container).toBe(1);
-    expectHealthy(await mapHealth(page), 'after lock-in');
+    expectHealthy(await mapHealth(page), 'after lock-in', { requireLabels: false });
   });
 
   test('a brand new game gets a working map without a reload', async ({ page }) => {
@@ -160,7 +222,7 @@ test.describe('Leaflet map lifecycle', () => {
     await page.getByRole('button', { name: /play 5 rounds/i }).click();
     await expect(page.getByRole('application')).toBeVisible();
 
-    expectHealthy(await mapHealth(page), 'second game');
+    expectHealthy(await settledHealth(page), 'second game');
     await placeGuess(page);
     await expect(page.locator('.marker-guess')).toHaveCount(1);
   });
@@ -178,6 +240,6 @@ test.describe('Leaflet map lifecycle', () => {
       await page.getByRole('button', { name: /next artifact/i }).click();
       await expect(page.locator('.marker-origin')).toHaveCount(0);
     }
-    expectHealthy(await mapHealth(page), 'after three rounds');
+    expectHealthy(await settledHealth(page), 'after three rounds', { requireLabels: false });
   });
 });

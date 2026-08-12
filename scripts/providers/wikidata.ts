@@ -377,6 +377,9 @@ async function normalize(
     material: tidyMaterial((binding.materials?.value ?? '').split('|').join(', ')),
     objectType: types[0] ?? null,
     origin,
+    // Attached centrally by the ingest once the final origin is known, so the
+    // implausible-drift check can compare the two. See lib/heartland.ts.
+    heartland: null,
     discovery: kind === 'findspot' && placeLabel ? `Recorded findspot: ${placeLabel}` : null,
     heldBy: binding.collection?.value?.trim() || null,
     image: {

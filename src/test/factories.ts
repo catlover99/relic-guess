@@ -1,10 +1,31 @@
-import type { Artifact, ArtifactImage, OriginPlace, ProviderId } from '@/data/schema';
+import type {
+  Artifact,
+  ArtifactImage,
+  HeartlandPlace,
+  OriginPlace,
+  ProviderId,
+} from '@/data/schema';
 
 /** Nested fields are merged, so a test can override just `origin.lat`. */
 export type ArtifactOverrides = Omit<Partial<Artifact>, 'origin' | 'image'> & {
   origin?: Partial<OriginPlace>;
   image?: Partial<ArtifactImage>;
 };
+
+/** A cultural homeland, for tests that need the three-concept reveal. */
+export function makeHeartland(overrides: Partial<HeartlandPlace> = {}): HeartlandPlace {
+  return {
+    lat: 38.05,
+    lon: 23.8,
+    label: 'the Aegean Greek world',
+    country: 'Greece',
+    radiusKm: 380,
+    culture: 'Ancient Greek',
+    confidence: 0.42,
+    resolvedId: 'culture:greek',
+    ...overrides,
+  };
+}
 
 /**
  * Builds a valid artifact with overridable fields.
@@ -58,6 +79,7 @@ export function makeArtifact(overrides: ArtifactOverrides = {}): Artifact {
     sourceUrl: 'https://www.metmuseum.org/art/collection/search/1',
     accessionNumber: '31.3.166',
     tags: ['Sphinx'],
+    heartland: null,
     quality: 0.8,
     fame: 0.7,
     lastSyncedAt: '2026-08-09T00:00:00.000Z',
@@ -108,6 +130,7 @@ export function makePool(count: number): Artifact[] {
         resolvedId: null,
       },
       fame: 0.5,
+      heartland: null,
       image: {
         url: `https://example.test/${index}.jpg`,
         alternates: [],

@@ -4,36 +4,79 @@ import { eraOf, type EraId } from './eras';
 import { regionOf, type RegionId } from './regions';
 import { shuffle, type Rng } from './random';
 
+/**
+ * Modes, easiest first.
+ *
+ * A mode sets two independent things, and the second one is what makes Heartland
+ * a different game rather than a longer clue list:
+ *
+ * 1. **How much you are told** — `clues`, and how obscure the objects get
+ *    (`minFame`).
+ * 2. **How precise an answer is being asked for** — `toleranceKm`, a radius
+ *    forgiven by the scorer no matter how exact the museum's coordinate is.
+ *
+ * Most objects in the collection have no findspot at all; the honest question for
+ * them is "where was this culture centred", and that is a question about a region
+ * a few hundred kilometres across. Demanding trench-level precision by default
+ * punished players for the dataset's own imprecision.
+ */
 export const DIFFICULTIES = [
   {
-    id: 'explorer',
-    label: 'Explorer',
-    blurb: 'Well-known finds. Culture, era and date shown before you guess.',
-    minFame: 0.45,
+    id: 'heartland',
+    label: 'Heartland',
+    blurb: 'Name the region a culture was centred on. Era, date and culture shown.',
+    /** One-line explanation of what counts as a right answer. */
+    aim: 'Anywhere in the right region scores well — no need to find the dig site.',
+    minFame: 0.3,
     /** Which metadata fields are visible pre-guess. */
     clues: ['objectType', 'culture', 'era', 'date', 'material'],
+    toleranceKm: 300,
+    /**
+     * Graded against the culture's homeland, not the object's own findspot.
+     *
+     * This is what makes Heartland a different question rather than a lenient
+     * version of the same one: "where was this culture centred" has a different
+     * right answer from "where was this pot dug up", and the reveal shows both.
+     * Artifacts whose culture the table does not cover fall back to their own
+     * recorded place — see game/geography.ts.
+     */
+    scoresAgainst: 'heartland',
   },
   {
     id: 'scholar',
     label: 'Scholar',
     blurb: 'A broader mix. You see the era and what it is made of.',
+    aim: 'Get within a country or so to score well.',
     minFame: 0.15,
     clues: ['objectType', 'era', 'material'],
+    toleranceKm: 120,
+    scoresAgainst: 'origin',
   },
   {
     id: 'expert',
     label: 'Expert',
     blurb: 'Anything in the collection. The object is your only clue.',
+    aim: 'Scored against the recorded find or origin place itself.',
     minFame: 0,
     clues: ['objectType'],
+    toleranceKm: 0,
+    scoresAgainst: 'origin',
   },
 ] as const;
+
+/** The mode a first-time player gets, and the one the daily challenge uses. */
+export const DEFAULT_DIFFICULTY: DifficultyId = 'heartland';
 
 export type DifficultyId = (typeof DIFFICULTIES)[number]['id'];
 export type ClueId = (typeof DIFFICULTIES)[number]['clues'][number];
 
 export function difficulty(id: DifficultyId) {
-  return DIFFICULTIES.find((d) => d.id === id) ?? DIFFICULTIES[1];
+  return DIFFICULTIES.find((d) => d.id === id) ?? DIFFICULTIES[0];
+}
+
+/** The radius a mode forgives, for the scorer. */
+export function toleranceFor(id: DifficultyId): number {
+  return difficulty(id).toleranceKm;
 }
 
 export function isClueVisible(id: DifficultyId, clue: ClueId): boolean {

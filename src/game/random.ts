@@ -42,6 +42,29 @@ export function pickOne<T>(items: readonly T[], rng: Rng): T | undefined {
   return items[Math.floor(rng() * items.length)];
 }
 
+/**
+ * Day 1 of the daily challenge.
+ *
+ * Fixed forever: the number printed in a shared result has to mean the same thing
+ * next year as it does today, so this date can never be edited without renumbering
+ * every result anyone has already posted.
+ */
+export const DAILY_EPOCH = '2026-08-01';
+
+/**
+ * The sequential daily challenge number, counting from `DAILY_EPOCH`.
+ *
+ * Both dates are parsed as UTC midnight rather than local time, so the difference
+ * is always a whole number of days regardless of the player's timezone or a
+ * daylight-saving transition in between.
+ */
+export function dailyNumber(key: string = todayKey()): number {
+  const day = Date.parse(`${key}T00:00:00Z`);
+  const epoch = Date.parse(`${DAILY_EPOCH}T00:00:00Z`);
+  if (Number.isNaN(day) || Number.isNaN(epoch)) return 1;
+  return Math.max(1, Math.round((day - epoch) / 86_400_000) + 1);
+}
+
 /** Local calendar date as YYYY-MM-DD — the daily challenge seed. */
 export function todayKey(now: Date = new Date()): string {
   const y = now.getFullYear();

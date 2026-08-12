@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  DEFAULT_CONFIG,
   ROUNDS_PER_SESSION,
   selectCurrentArtifact,
   selectCurrentResult,
@@ -9,7 +10,8 @@ import {
   useGame,
 } from './store';
 import { MAX_ROUND_SCORE } from './scoring';
-import { makePool } from '@/test/factories';
+import { DEFAULT_DIFFICULTY } from './selection';
+import { makeHeartland, makePool } from '@/test/factories';
 
 const pool = makePool(80);
 
@@ -203,6 +205,152 @@ describe('game store', () => {
     useGame.setState({ phase: 'menu', rounds: [], results: [] });
     await useGame.getState().startSession({ mode: 'daily' });
     expect(useGame.getState().rounds.map((a) => a.id)).toEqual(first);
+  });
+
+  it('plays the daily on the default Heartland rules', async () => {
+    useGame.setState({
+      pool,
+      phase: 'menu',
+      verifyImage: async (a) => a.image.url,
+      // Whatever the player last chose must not leak into the daily: everyone
+      // has to be playing the same game, not just the same artifacts.
+      config: { mode: 'classic', difficulty: 'expert', region: 'europe', era: 'bronze' },
+    });
+    await useGame.getState().startSession({ mode: 'daily' });
+
+    const { config } = useGame.getState();
+    expect(config.difficulty).toBe(DEFAULT_DIFFICULTY);
+    expect(config.difficulty).toBe('heartland');
+    expect(config.region).toBeNull();
+    expect(config.era).toBeNull();
+  });
+
+  it('scores the daily with the forgiving Heartland tolerance', async () => {
+    useGame.setState({ pool, phase: 'menu', verifyImage: async (a) => a.image.url });
+    await useGame.getState().startSession({ mode: 'daily' });
+
+    const artifact = useGame.getState().rounds[0]!;
+    // 200 km out — inside the region, so a correct answer to the question asked.
+    useGame
+      .getState()
+      .setGuess({ lat: artifact.origin.lat + 200 / 111.19, lon: artifact.origin.lon });
+    useGame.getState().submitGuess();
+
+    const result = useGame.getState().results[0]!;
+    expect(result.breakdown.toleranceKm).toBeGreaterThanOrEqual(300);
+    expect(result.breakdown.score).toBe(MAX_ROUND_SCORE);
+  });
+
+  it('scores Expert against the coordinate itself', async () => {
+    useGame.setState({
+      pool,
+      phase: 'menu',
+      verifyImage: async (a) => a.image.url,
+      config: { mode: 'classic', difficulty: 'expert', region: null, era: null },
+    });
+    await useGame.getState().startSession({ mode: 'classic', difficulty: 'expert' });
+
+    const artifact = useGame.getState().rounds[0]!;
+    useGame
+      .getState()
+      .setGuess({ lat: artifact.origin.lat + 200 / 111.19, lon: artifact.origin.lon });
+    useGame.getState().submitGuess();
+
+    const result = useGame.getState().results[0]!;
+    // Only the origin's own uncertainty is forgiven, never a mode floor.
+    expect(result.breakdown.toleranceKm).toBe(artifact.origin.uncertaintyKm);
+    expect(result.breakdown.score).toBeLessThan(MAX_ROUND_SCORE);
+  });
+
+  it('starts a new player on Heartland', () => {
+    /*
+     * Asserted on the boot config rather than on live state: the store is a
+     * module singleton, so by this point an earlier test in the file has already
+     * switched the mode. This is the value a fresh tab loads with.
+     */
+    expect(DEFAULT_CONFIG.difficulty).toBe(DEFAULT_DIFFICULTY);
+    expect(DEFAULT_CONFIG.difficulty).toBe('heartland');
+  });
+
+  it('keeps the daily deterministic now that rounds carry a heartland', async () => {
+    const withHeartlands = pool.map((artifact, index) =>
+      index % 2 === 0 ? { ...artifact, heartland: makeHeartland() } : artifact,
+    );
+    useGame.setState({
+      pool: withHeartlands,
+      phase: 'menu',
+      verifyImage: async (a) => a.image.url,
+    });
+    await useGame.getState().startSession({ mode: 'daily' });
+    const first = useGame.getState().rounds.map((a) => a.id);
+
+    useGame.setState({ phase: 'menu', rounds: [], results: [] });
+    await useGame.getState().startSession({ mode: 'daily' });
+    expect(useGame.getState().rounds.map((a) => a.id)).toEqual(first);
+  });
+
+  it('scores the daily against the heartland, not the findspot', async () => {
+    const heartland = makeHeartland({ lat: 10, lon: 10, radiusKm: 380 });
+    // Every artifact keeps its own far-away findspot.
+    const withHeartlands = pool.map((artifact) => ({ ...artifact, heartland }));
+    useGame.setState({
+      pool: withHeartlands,
+      phase: 'menu',
+      verifyImage: async (a) => a.image.url,
+    });
+    await useGame.getState().startSession({ mode: 'daily' });
+
+    // A guess on the homeland scores full marks even though no artifact was
+    // found there.
+    useGame.getState().setGuess({ lat: 10, lon: 10 });
+    useGame.getState().submitGuess();
+
+    const result = useGame.getState().results[0]!;
+    expect(result.geography.regionIsHeartland).toBe(true);
+    expect(result.geography.region.label).toBe(heartland.label);
+    expect(result.breakdown.score).toBe(MAX_ROUND_SCORE);
+  });
+
+  it('leaves the precise modes scoring against the object itself', async () => {
+    const heartland = makeHeartland({ lat: 10, lon: 10 });
+    useGame.setState({
+      pool: pool.map((artifact) => ({ ...artifact, heartland })),
+      phase: 'menu',
+      verifyImage: async (a) => a.image.url,
+      config: { mode: 'classic', difficulty: 'expert', region: null, era: null },
+    });
+    await useGame.getState().startSession({ mode: 'classic', difficulty: 'expert' });
+
+    const artifact = useGame.getState().rounds[0]!;
+    useGame.getState().setGuess({ lat: artifact.origin.lat, lon: artifact.origin.lon });
+    useGame.getState().submitGuess();
+
+    const result = useGame.getState().results[0]!;
+    // The homeland is present on the artifact but must not be what Expert grades.
+    expect(result.geography.regionIsHeartland).toBe(false);
+    expect(result.breakdown.score).toBe(MAX_ROUND_SCORE);
+  });
+
+  it('records the object location alongside the scored region', async () => {
+    const heartland = makeHeartland({ lat: 10, lon: 10 });
+    useGame.setState({
+      pool: pool.map((artifact) => ({ ...artifact, heartland })),
+      phase: 'menu',
+      verifyImage: async (a) => a.image.url,
+      config: { mode: 'classic', difficulty: 'heartland', region: null, era: null },
+    });
+    await useGame.getState().startSession({ mode: 'classic', difficulty: 'heartland' });
+
+    useGame.getState().setGuess({ lat: 0, lon: 0 });
+    useGame.getState().submitGuess();
+
+    const result = useGame.getState().results[0]!;
+    // Three concepts on one result: the guess, the scored region, and where the
+    // object itself actually was.
+    expect(result.guess).toEqual({ lat: 0, lon: 0 });
+    expect(result.geography.region.kind).toBe('heartland');
+    expect(result.geography.objectLocation).not.toBeNull();
+    expect(result.geography.objectLocation!.label).toBe(result.artifact.origin.label);
   });
 
   it('errors clearly when filters match nothing', async () => {

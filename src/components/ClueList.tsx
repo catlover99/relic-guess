@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Hammer, Layers, Shapes, Users } from 'lucide-react';
 import type { Artifact } from '@/data/schema';
-import { eraLabel, eraOf, formatYearRange } from '@/game/eras';
+import { eraOf, eraWithRange, formatYearRange } from '@/game/eras';
 import { isClueVisible, type DifficultyId } from '@/game/selection';
 import { Chip } from './ui/primitives';
 
@@ -40,7 +40,9 @@ export function ClueList({
     clues.push({
       key: 'era',
       label: 'Era',
-      value: eraLabel(era),
+      // Named *and* dated: "Classical Antiquity" is not a clue to a player who
+      // does not already know when that was.
+      value: eraWithRange(era),
       icon: <Layers size={13} aria-hidden />,
     });
   }

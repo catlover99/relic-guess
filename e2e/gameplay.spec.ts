@@ -160,7 +160,7 @@ test.describe('core gameplay loop', () => {
     await expect(page.getByText('Made of', { exact: true })).toHaveCount(0);
 
     await page.getByRole('button', { name: /return to the menu/i }).click();
-    await page.getByRole('radio', { name: /explorer/i }).click();
+    await page.getByRole('radio', { name: /heartland/i }).click();
     await page.getByRole('button', { name: /play 5 rounds/i }).click();
     await expect(page.getByRole('application')).toBeVisible();
     // Explorer adds culture, era, date and material.

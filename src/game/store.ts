@@ -2,7 +2,8 @@ import { create } from 'zustand';
 import type { Artifact, ArtifactBundle, GeoPoint } from '@/data/schema';
 import { parseBundle } from '@/data/schema';
 import { scoreGuess, type ScoreBreakdown } from './scoring';
-import { type DifficultyId } from './selection';
+import { DEFAULT_DIFFICULTY, toleranceFor, type DifficultyId } from './selection';
+import { roundGeography, type RoundGeography } from './geography';
 import { buildSession, findReplacement } from './session';
 import { markImageUnavailable, resolveArtifactImage } from './imageValidation';
 import type { RegionId } from './regions';
@@ -31,6 +32,15 @@ export interface RoundResult {
   artifact: Artifact;
   guess: GeoPoint;
   breakdown: ScoreBreakdown;
+  /**
+   * What the round meant geographically, resolved once when the guess was
+   * submitted.
+   *
+   * Carried on the result rather than recomputed by the map and the reveal panel
+   * separately: they must agree about which point was scored, and the mode can
+   * change before the player leaves the summary screen.
+   */
+  geography: RoundGeography;
 }
 
 interface GameState {
@@ -89,9 +99,10 @@ interface GameState {
   setTheme: (theme: Profile['theme']) => void;
 }
 
-const DEFAULT_CONFIG: SessionConfig = {
+/** What a first-time visitor plays before touching any control. */
+export const DEFAULT_CONFIG: SessionConfig = {
   mode: 'classic',
-  difficulty: 'scholar',
+  difficulty: DEFAULT_DIFFICULTY,
   region: null,
   era: null,
 };
@@ -182,7 +193,13 @@ export const useGame = create<GameState>((set, get) => ({
     // by date and ignores the region/era filters.
     const isDaily = config.mode === 'daily';
     const effectiveConfig: SessionConfig = isDaily
-      ? { mode: 'daily', difficulty: 'scholar', region: null, era: null }
+      ? /*
+         * The daily is the mode most people meet first, so it plays by the same
+         * forgiving rules as the default: name the region, not the trench. Fixing
+         * the difficulty here is also what keeps it identical for everyone —
+         * whatever the player last chose in the menu must not leak into it.
+         */
+        { mode: 'daily', difficulty: DEFAULT_DIFFICULTY, region: null, era: null }
       : config;
 
     const seed = isDaily ? `daily:${todayKey()}` : `session:${Date.now()}:${Math.random()}`;
@@ -368,10 +385,25 @@ export const useGame = create<GameState>((set, get) => ({
     const artifact = rounds[roundIndex];
     if (!artifact) return;
 
-    const breakdown = scoreGuess(guess, artifact.origin);
+    /*
+     * What the round is graded against is a geography question, not a scoring
+     * one, so it is answered in one place. Heartland and Daily grade against the
+     * culture's homeland; the precise modes grade against the object's own
+     * recorded place. Either way the scorer sees a centre and a radius.
+     */
+    const geography = roundGeography(artifact, get().config.difficulty);
+    const breakdown = scoreGuess(
+      guess,
+      {
+        lat: geography.region.lat,
+        lon: geography.region.lon,
+        uncertaintyKm: geography.region.radiusKm,
+      },
+      { minToleranceKm: toleranceFor(get().config.difficulty) },
+    );
     set({
       phase: 'revealed',
-      results: [...results, { artifact, guess, breakdown }],
+      results: [...results, { artifact, guess, breakdown, geography }],
     });
   },
 

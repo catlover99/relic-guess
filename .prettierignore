@@ -1,5 +1,7 @@
-# Generated data bundle: pretty-printing it triples the transfer size.
+# Generated data: pretty-printing these inflates the transfer size (the basemap
+# went from 747 KB to 1.3 MB when Prettier reached it).
 public/data/artifacts.json
+public/data/basemap.json
 
 dist
 .cache

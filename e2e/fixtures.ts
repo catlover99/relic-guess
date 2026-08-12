@@ -6,20 +6,15 @@ import { test as base, expect, type Page } from '@playwright/test';
  * Three things are stubbed so the suite is fast, deterministic and does not touch
  * third-party services:
  *
- * 1. **Map tiles** are served as a 1×1 PNG. Loading real tiles would put test
- *    traffic on a donation-funded service, and their latency dominates runtime.
+ * 1. **The basemap** is replaced with a small fixed set of countries. The real
+ *    one is a 750 KB Natural Earth extract; a handful of squares exercises the
+ *    same rendering and label code in a fraction of the time.
  * 2. **Artifact photographs** are served as a local placeholder for the same
  *    reasons.
  * 3. **The artifact bundle** is replaced with a fixed five-artifact set, so
  *    assertions about titles, distances and scores are stable regardless of what
  *    the last ingest produced.
  */
-
-/** 1×1 transparent PNG. Fine for map tiles, which are only ever decoration here. */
-const PIXEL = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==',
-  'base64',
-);
 
 /**
  * A stand-in artifact photograph with real dimensions.
@@ -48,7 +43,7 @@ export const TEST_ARTIFACTS: TestArtifact[] = [
   { title: 'Benin Bronze Plaque', lat: 6.335, lon: 5.6222 },
 ];
 
-export function bundle(extra = 0) {
+export function bundle(extra = 0, withHeartlands = true) {
   const cultures = ['Ancient Egyptian', 'Assyrian', 'Ancient Greek', 'Moche', 'Edo'];
   const years = [-1450, -860, -520, 400, 1550];
   const cultureAt = (i: number) => cultures[i % cultures.length]!;
@@ -107,6 +102,25 @@ export function bundle(extra = 0) {
       },
       discovery: 'Excavated during testing',
       heldBy: 'The Test Museum',
+      /*
+       * Every artifact carries a cultural homeland ~900 km from where the object
+       * itself was found. That is the case the reveal has to keep separate: the
+       * score is measured to the homeland, the findspot is shown as context.
+       * `useBundleWithoutHeartlands` serves the same collection with none, for the
+       * "homeland unknown" path.
+       */
+      heartland: withHeartlands
+        ? {
+            lat: artifact.lat + 6,
+            lon: artifact.lon + 6,
+            label: `${cultureAt(index)} homeland`,
+            country: 'Testland',
+            radiusKm: 380,
+            culture: cultureAt(index),
+            confidence: 0.42,
+            resolvedId: `culture:test-${index}`,
+          }
+        : null,
       image: {
         url: `https://images.test/${index + 1}.jpg`,
         // No alternates: a broken primary must cost the artifact, so the tests
@@ -131,6 +145,65 @@ export function bundle(extra = 0) {
   };
 }
 
+/**
+ * A stand-in atlas: a grid of named boxes covering the globe.
+ *
+ * Deliberately not a slice of the real file — tests assert on these names, so a
+ * regenerated basemap can never quietly break them. It has to cover the whole
+ * world rather than a few boxes, because the reveal zooms to wherever the
+ * artifact came from and "no labels here" would otherwise look like the map
+ * having died.
+ */
+export const TEST_BASEMAP = {
+  version: 1,
+  attribution: 'Natural Earth',
+  countries: worldGrid(),
+  lakes: [ring(10, 10, 3)],
+  capitals: [{ name: 'Testville', at: [33, 26], minZoom: 3 }],
+};
+
+function worldGrid() {
+  const lats = [-60, -20, 20, 60];
+  const lons = [-165, -135, -105, -75, -45, -15, 15, 45, 75, 105, 135, 165];
+  const countries = [];
+  for (const lat of lats) {
+    for (const lon of lons) {
+      // One recognisable name the specs can assert on, over the region the test
+      // artifacts come from; the rest are unique but unremarkable.
+      const named = lat === 20 && lon === 45;
+      countries.push(
+        box(
+          named ? 'Testland' : `Country ${lat >= 0 ? 'N' : 'S'}${Math.abs(lat)}E${lon}`,
+          lat,
+          lon,
+        ),
+      );
+    }
+  }
+  return countries;
+}
+
+function ring(lat: number, lon: number, size: number): Array<[number, number]> {
+  return [
+    [lon - size, lat - size],
+    [lon + size, lat - size],
+    [lon + size, lat + size],
+    [lon - size, lat + size],
+    [lon - size, lat - size],
+  ];
+}
+
+function box(name: string, lat: number, lon: number) {
+  return {
+    name,
+    shapes: [ring(lat, lon, 15)],
+    label: [lon, lat],
+    minZoom: 1,
+    maxZoom: 12,
+    rank: 2,
+  };
+}
+
 export async function stubNetwork(page: Page): Promise<void> {
   await page.route('**/data/artifacts.json', (route) =>
     route.fulfill({
@@ -140,8 +213,22 @@ export async function stubNetwork(page: Page): Promise<void> {
     }),
   );
 
-  await page.route(/tile\.openstreetmap\.org|basemaps\.cartocdn\.com|tiles\./, (route) =>
-    route.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }),
+  await page.route('**/data/basemap.json', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(TEST_BASEMAP),
+    }),
+  );
+
+  /*
+   * Any request to a tile server is a bug now, not a slow test: the map is drawn
+   * from the bundled basemap and must never silently fall back to a POI-heavy
+   * raster provider. Aborting makes that fail loudly.
+   */
+  await page.route(
+    /tile\.openstreetmap\.org|basemaps\.cartocdn\.com|tiles\.|\.pbf|arcgisonline|maps\.wikimedia/,
+    (route) => route.abort(),
   );
 
   await page.route(
@@ -159,6 +246,22 @@ export const test = base.extend<{ page: Page }>({
     await use(page);
   },
 });
+
+/**
+ * Serves the same collection with no cultural homelands.
+ *
+ * Heartland then falls back to grading against each object's own place, which is
+ * what happens for the majority of the real collection.
+ */
+export async function useBundleWithoutHeartlands(page: Page): Promise<void> {
+  await page.route('**/data/artifacts.json', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(bundle(0, false)),
+    }),
+  );
+}
 
 /**
  * Serves a larger collection, for tests that deliberately break several
@@ -207,6 +310,23 @@ export async function startGame(page: Page): Promise<void> {
   await expect(page.getByRole('application')).toBeVisible({ timeout: 60_000 });
   // Leaflet initialises in an effect once the chunk has arrived.
   await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 60_000 });
+
+  /*
+   * The round screen's stylesheet is part of the same lazy chunk, and arrives as
+   * a separate <link>. Leaflet's container can therefore exist, and be visible,
+   * for a frame or two before map.css applies — during which the zoom control is
+   * an unstyled 18px anchor. Any measurement taken then is meaningless, so wait
+   * for the styling to land rather than for the element.
+   */
+  await expect
+    .poll(
+      () =>
+        page
+          .locator('.leaflet-control-zoom-in')
+          .evaluate((node) => node.getBoundingClientRect().height),
+      { timeout: 30_000 },
+    )
+    .toBeGreaterThan(24);
 }
 
 /**

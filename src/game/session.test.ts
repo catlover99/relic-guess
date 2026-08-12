@@ -302,7 +302,7 @@ describe('buildSession — diversity is preserved under verification', () => {
     const result = await buildSession({
       pool,
       rounds: 5,
-      difficulty: 'explorer',
+      difficulty: 'heartland',
       seed: 'h',
       verify,
     });

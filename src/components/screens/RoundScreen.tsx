@@ -21,8 +21,8 @@ import { TopBar } from '../TopBar';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { SectionTitle } from '../ui/primitives';
-import { useResolvedTheme } from '@/hooks/useResolvedTheme';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { useResolvedTheme } from '@/hooks/useResolvedTheme';
 
 /**
  * The round screen.
@@ -70,13 +70,13 @@ export function RoundScreen() {
   const nextRound = useGame((state) => state.nextRound);
   const openMenu = useGame((state) => state.openMenu);
 
-  const theme = useResolvedTheme();
   /*
    * The split layout is chosen by available *area*, not width alone. A phone in
    * landscape (844×390) is below the 1024px breakpoint but stacking on it leaves
    * the map about 50px tall — so any viewport that is wide and short gets the
    * side-by-side treatment too.
    */
+  const theme = useResolvedTheme();
   const isSplit = useMediaQuery('(min-width: 64rem), (min-width: 40rem) and (max-height: 34rem)');
   const reduceMotion = useReducedMotion();
 
@@ -203,8 +203,32 @@ export function RoundScreen() {
     <GameMap
       guess={guess}
       onGuessChange={setGuess}
-      origin={revealed && result ? result.artifact.origin : null}
+      /*
+       * The scored region, not the artifact's origin. In Heartland and Daily those
+       * are different places, and the circle has to sit on the one the score was
+       * measured to.
+       */
+      origin={
+        revealed && result
+          ? {
+              lat: result.geography.region.lat,
+              lon: result.geography.region.lon,
+              label: result.geography.region.label,
+              radiusKm: result.geography.region.radiusKm,
+            }
+          : null
+      }
+      discovery={
+        revealed && result?.geography.objectLocation
+          ? {
+              lat: result.geography.objectLocation.lat,
+              lon: result.geography.objectLocation.lon,
+              label: result.geography.objectLocation.label,
+            }
+          : null
+      }
       locked={revealed}
+      compact={!isSplit}
       theme={theme}
       resetKey={viewEpoch}
       padding={mapPadding}

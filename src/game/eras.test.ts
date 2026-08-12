@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { eraLabel, eraOf, formatYearRange } from './eras';
+import { ERAS, eraLabel, eraOf, eraRange, eraWithRange, formatYearRange } from './eras';
 import { regionFromPoint, regionLabel, regionOf } from './regions';
 import { makeArtifact } from '@/test/factories';
 
@@ -107,5 +107,52 @@ describe('regionOf', () => {
   it('has a label for every region and for null', () => {
     expect(regionLabel('west-asia')).toBe('West Asia');
     expect(regionLabel(null)).toBe('Unknown region');
+  });
+});
+
+describe('era ranges', () => {
+  it('gives every era a chronological span', () => {
+    for (const era of ERAS) {
+      expect(eraRange(era.id)).toBeTruthy();
+      // Every span has to say which side of the epoch it is on.
+      expect(eraRange(era.id)).toMatch(/BCE|CE/);
+    }
+  });
+
+  it('names the era and dates it together', () => {
+    expect(eraWithRange('classical')).toBe('Classical Antiquity · c. 1200 BCE – 300 CE');
+    expect(eraWithRange('bronze')).toBe('Bronze Age · c. 3000–1200 BCE');
+    expect(eraWithRange('prehistoric')).toBe('Prehistory · before c. 3000 BCE');
+  });
+
+  it('uses BCE/CE everywhere, never BC/AD', () => {
+    for (const era of ERAS) {
+      expect(era.range).not.toMatch(/\b(BC|AD)\b/);
+    }
+  });
+
+  it('marks the spans as approximate', () => {
+    // These boundaries are conventional round numbers, and the artifact's own
+    // recorded date is always the precise statement.
+    for (const era of ERAS) {
+      expect(era.range).toContain('c. ');
+    }
+  });
+
+  it('has no gaps or overlaps between consecutive eras', () => {
+    for (let i = 1; i < ERAS.length; i++) {
+      expect(ERAS[i]!.max).toBeGreaterThan(ERAS[i - 1]!.max);
+    }
+  });
+
+  it('describes an undated object rather than inventing a range', () => {
+    expect(eraWithRange(null)).toBe('Undated');
+    expect(eraRange(null)).toBeNull();
+  });
+
+  it('avoids the awkward provider-style label players complained about', () => {
+    const labels = ERAS.map((era) => era.label);
+    expect(labels).not.toContain('Medieval & After');
+    expect(labels).toContain('Medieval & Later');
   });
 });

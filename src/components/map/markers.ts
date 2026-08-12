@@ -6,10 +6,18 @@ import L from 'leaflet';
  * The player's guess and the true origin must be distinguishable without
  * relying on colour, so each differs along three axes:
  *
- * | role   | shape          | fill              | glyph |
- * |--------|----------------|-------------------|-------|
- * | guess  | teardrop pin   | hollow, dashed    | "?"   |
- * | origin | flag on a post | solid             | trowel|
+ * | role      | shape          | fill              | glyph  |
+ * |-----------|----------------|-------------------|--------|
+ * | guess     | teardrop pin   | hollow, dashed    | "?"    |
+ * | region    | flag on a post | solid             | trowel |
+ * | discovery | square stake   | solid, notched    | spade  |
+ *
+ * The third one matters as much as the first two. A revealed Heartland round shows
+ * where the player guessed, the region the guess was graded against, and — when the
+ * museum records one — where the object itself was actually dug up. Those are three
+ * different claims, so they get three different silhouettes rather than three
+ * colours: colour alone would fail for a red-green colour-blind player and vanish
+ * entirely in forced-colors mode.
  *
  * They are `divIcon`s containing inline SVG rather than image files: the shapes
  * then inherit theme tokens via `currentColor`, need no network request, and
@@ -50,6 +58,40 @@ export function createGuessIcon(draggable: boolean): L.DivIcon {
   });
 }
 
+const DISCOVERY_SIZE: [number, number] = [34, 42];
+
+/**
+ * The object's own findspot.
+ *
+ * A surveyor's stake rather than a pin: squared off, planted in the ground, with a
+ * spade blade on the marker board. It reads as "something was excavated here"
+ * rather than as an answer, which is the point — this marker never affects the
+ * score.
+ */
+const discoverySvg = `
+<svg viewBox="0 0 34 42" width="34" height="42" class="marker-pin" aria-hidden="true">
+  <!-- stake -->
+  <rect x="15" y="16" width="3.2" height="24" rx="1.4" fill="currentColor"/>
+  <!-- notched board -->
+  <path d="M3 2h28v14H3l4-7Z" fill="currentColor"/>
+  <!-- spade blade, knocked out of the board -->
+  <path d="M17 5.4c2.6 2.2 4 3.7 4 5.2a2.6 2.6 0 0 1-2.8 2.5h-2.4A2.6 2.6 0 0 1 13 10.6c0-1.5 1.4-3 4-5.2Z"
+        fill="var(--surface)"/>
+  <rect x="16.2" y="11.6" width="1.6" height="2.6" rx="0.6" fill="var(--surface)"/>
+  <!-- ground -->
+  <ellipse cx="16.6" cy="40" rx="6" ry="1.9" fill="currentColor" opacity="0.35"/>
+</svg>`;
+
+export function createDiscoveryIcon(): L.DivIcon {
+  return L.divIcon({
+    className: 'marker-root marker-discovery',
+    html: discoverySvg,
+    iconSize: DISCOVERY_SIZE,
+    // The foot of the stake is the coordinate.
+    iconAnchor: [16.6, DISCOVERY_SIZE[1] - 2],
+  });
+}
+
 export function createOriginIcon(): L.DivIcon {
   return L.divIcon({
     className: 'marker-root marker-origin',
@@ -61,14 +103,18 @@ export function createOriginIcon(): L.DivIcon {
 }
 
 /**
- * A ring showing the origin's uncertainty radius.
+ * The region a guess was graded against.
  *
- * Drawn only for coarse coordinates: it is the visual counterpart of the scoring
- * tolerance, and it is honest about the fact that "somewhere in Mesopotamia" is
- * not a pin.
+ * Always drawn on a Heartland or Daily reveal, including when the object has an
+ * exact findspot, because the radius *is* the scoring rule: everything inside it
+ * scored as if it were on the spot. Hiding it whenever a precise coordinate
+ * existed left the most forgiving mode looking arbitrary.
  */
 export function uncertaintyCircleOptions(): L.CircleMarkerOptions {
   return {
+    // Named so the stylesheet and the reveal tests can both refer to it, rather
+    // than identifying it as "the path without a class".
+    className: 'reveal-region',
     color: 'var(--origin)',
     weight: 1.5,
     opacity: 0.55,

@@ -1,6 +1,6 @@
 import { ExternalLink, Landmark, MapPin, Shovel } from 'lucide-react';
 import type { Artifact } from '@/data/schema';
-import { eraLabel, eraOf, formatYearRange } from '@/game/eras';
+import { eraOf, eraWithRange, formatYearRange } from '@/game/eras';
 import { regionLabel, regionOf } from '@/game/regions';
 import type { RoundResult } from '@/game/store';
 import { cn } from '@/lib/cn';
@@ -27,6 +27,19 @@ const ORIGIN_KIND_NOTE: Partial<Record<Artifact['origin']['kind'], string>> = {
   attributed: 'The holding museum records this origin as uncertain.',
 };
 
+/**
+ * Heading for the object's own location, chosen from what the record actually
+ * says. "Excavated at" is not applied to a place the museum only calls a place of
+ * manufacture, and "Found at" is never used for an attribution the provider
+ * itself hedges.
+ */
+const OBJECT_ROLE_COPY: Record<'found' | 'excavated' | 'made' | 'attributed', string> = {
+  found: 'Found at',
+  excavated: 'Excavated at',
+  made: 'Made at',
+  attributed: 'Attributed to',
+};
+
 const TIER_COPY: Record<Artifact['origin']['tier'], string> = {
   findspot: 'exact findspot',
   site: 'archaeological site',
@@ -48,7 +61,7 @@ const TIER_COPY: Record<Artifact['origin']['tier'], string> = {
  * deserves to know that rather than assume the game is wrong.
  */
 export function RevealPanel({ result, className }: { result: RoundResult; className?: string }) {
-  const { artifact, breakdown, guess } = result;
+  const { artifact, breakdown, guess, geography } = result;
   const { origin } = artifact;
   const era = eraOf(artifact);
   const region = regionOf(artifact);
@@ -57,26 +70,71 @@ export function RevealPanel({ result, className }: { result: RoundResult; classN
 
   return (
     <div className={cn('space-y-5', className)}>
-      <ScoreReveal breakdown={breakdown} guess={guess} origin={origin} />
+      <ScoreReveal
+        breakdown={breakdown}
+        guess={guess}
+        origin={origin}
+        regionIsHeartland={geography.regionIsHeartland}
+      />
 
       <hr className="border-line" />
 
+      {/*
+        The answer, in up to two parts.
+
+        A Heartland round is graded against the culture's homeland, and the object
+        itself was often dug up somewhere else entirely — the Venus de Milo was
+        found on Milos, 205 km from the centre of the Aegean Greek world. Showing
+        one place and calling it "the answer" hid whichever of the two the player
+        had not been told about. When both exist they get their own rows, so it is
+        obvious which one the score was measured to.
+      */}
       <section aria-labelledby="reveal-answer">
         <SectionTitle className="mb-1.5">
-          <span id="reveal-answer">{ORIGIN_KIND_COPY[origin.kind]}</span>
+          <span id="reveal-answer">
+            {geography.regionIsHeartland ? 'Cultural heartland' : ORIGIN_KIND_COPY[origin.kind]}
+          </span>
         </SectionTitle>
         <p className="flex items-start gap-2 font-display text-xl">
           <MapPin size={18} className="mt-1 shrink-0 text-origin" aria-hidden />
-          <span className="min-w-0 break-words">{origin.label}</span>
+          <span className="min-w-0 break-words">{geography.region.label}</span>
         </p>
         <div className="mt-2 flex flex-wrap gap-1.5">
-          <Chip tone="origin">Recorded to {TIER_COPY[origin.tier]}</Chip>
+          {geography.regionIsHeartland ? (
+            <Chip tone="origin">Scored within {Math.round(geography.region.radiusKm)} km</Chip>
+          ) : (
+            <Chip tone="origin">Recorded to {TIER_COPY[origin.tier]}</Chip>
+          )}
           {region && <Chip>{regionLabel(region)}</Chip>}
         </div>
-        {ORIGIN_KIND_NOTE[origin.kind] && (
-          <p className="mt-2 text-xs leading-relaxed text-ink-3">{ORIGIN_KIND_NOTE[origin.kind]}</p>
+        {geography.regionIsHeartland ? (
+          <p className="mt-2 text-xs leading-relaxed text-ink-3">
+            Your guess was scored against the region this culture occupied, not a single spot on the
+            map.
+          </p>
+        ) : (
+          ORIGIN_KIND_NOTE[origin.kind] && (
+            <p className="mt-2 text-xs leading-relaxed text-ink-3">
+              {ORIGIN_KIND_NOTE[origin.kind]}
+            </p>
+          )
         )}
       </section>
+
+      {geography.objectLocation && (
+        <section aria-labelledby="reveal-findspot">
+          <SectionTitle className="mb-1.5">
+            <span id="reveal-findspot">{OBJECT_ROLE_COPY[geography.objectLocation.role]}</span>
+          </SectionTitle>
+          <p className="flex items-start gap-2 font-display text-lg">
+            <Shovel size={17} className="mt-1 shrink-0 text-ink-2" aria-hidden />
+            <span className="min-w-0 break-words">{geography.objectLocation.label}</span>
+          </p>
+          <p className="mt-2 text-xs leading-relaxed text-ink-3">
+            Where this object itself was recorded. It did not affect your score.
+          </p>
+        </section>
+      )}
 
       <section aria-labelledby="reveal-object">
         <SectionTitle className="mb-1">
@@ -89,13 +147,20 @@ export function RevealPanel({ result, className }: { result: RoundResult; classN
 
         <dl className="mt-3">
           {artifact.culture && <FactRow label="Culture">{artifact.culture}</FactRow>}
+          {/*
+            Three separate statements, deliberately not merged:
+
+              Date    early 4th century BCE      what the museum dates *this object* to
+              Period  Late Classical            the museum's own period term
+              Era     Classical Antiquity · c. 1200 BCE – 300 CE   our bracket, dated
+
+            The object's own date is the precise one and always wins the top row.
+            The era exists to tell a player who has never met the word "Classical"
+            roughly when that was, so it is useless without its range.
+          */}
+          {dateText && <FactRow label="Date">{dateText}</FactRow>}
           {artifact.period && <FactRow label="Period">{artifact.period}</FactRow>}
-          {dateText && (
-            <FactRow label="Date">
-              {dateText}
-              {era && <span className="text-ink-3"> · {eraLabel(era)}</span>}
-            </FactRow>
-          )}
+          {era && <FactRow label="Era">{eraWithRange(era)}</FactRow>}
           {artifact.material && <FactRow label="Material">{artifact.material}</FactRow>}
           {artifact.objectType && <FactRow label="Type">{artifact.objectType}</FactRow>}
           {artifact.discovery && (

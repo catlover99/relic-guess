@@ -229,6 +229,9 @@ async function normalize(record: CmaRecord, context: HarvestContext): Promise<Ar
     material: tidyMaterial(record.technique),
     objectType: record.type?.trim() || null,
     origin,
+    // Attached centrally by the ingest once the final origin is known, so the
+    // implausible-drift check can compare the two. See lib/heartland.ts.
+    heartland: null,
     discovery: findSpot && !isHearsayFindspot(findSpot) ? `Findspot recorded as ${findSpot}` : null,
     heldBy: 'The Cleveland Museum of Art',
     image: {

@@ -3,6 +3,8 @@ import { Check, Copy, Home, RotateCcw, Trophy } from 'lucide-react';
 import { formatDistance } from '@/game/geo';
 import { formatScore, MAX_ROUND_SCORE, scoreBand, sessionRank } from '@/game/scoring';
 import { DIFFICULTIES } from '@/game/selection';
+import { buildShareText } from '@/game/share';
+import { dailyNumber } from '@/game/random';
 import { useGame, type RoundResult } from '@/game/store';
 import { Button } from '../ui/Button';
 import { Panel, SectionTitle } from '../ui/primitives';
@@ -38,7 +40,9 @@ export function SummaryScreen() {
         <Panel className="overflow-hidden">
           <header className="border-b border-line bg-brand-soft px-5 py-6 text-center">
             <p className="text-xs font-semibold tracking-[0.1em] text-brand uppercase">
-              {config.mode === 'daily' ? "Today's challenge" : `${difficultyLabel} · complete`}
+              {config.mode === 'daily'
+                ? `Daily #${dailyNumber()}`
+                : `${difficultyLabel} · complete`}
             </p>
             <p className="tnum font-display text-4xl leading-none font-semibold text-ink">
               {formatScore(total)}
@@ -79,7 +83,7 @@ export function SummaryScreen() {
               Play again
             </Button>
             <div className="flex gap-2">
-              <ShareButton results={results} total={total} mode={config.mode} />
+              <ShareButton results={results} mode={config.mode} modeLabel={difficultyLabel} />
               <Button block onClick={openMenu} iconLeft={<Home size={16} aria-hidden />}>
                 Change settings
               </Button>
@@ -136,26 +140,26 @@ function RoundRow({ result, index }: { result: RoundResult; index: number }) {
 /**
  * Copies a spoiler-free result summary.
  *
- * Uses distance bands rather than artifact names so sharing a daily challenge does
- * not give the answers away, and falls back to a textarea copy where the
- * clipboard API is unavailable or blocked.
+ * The text itself is built in `game/share.ts` so its exact shape is testable;
+ * this component only owns the clipboard interaction, including the textarea
+ * fallback for browsers where the async clipboard API is unavailable or blocked.
  */
 function ShareButton({
   results,
-  total,
   mode,
+  modeLabel,
 }: {
   results: RoundResult[];
-  total: number;
   mode: 'classic' | 'daily';
+  modeLabel: string;
 }) {
   const [copied, setCopied] = useState(false);
 
-  const text = [
-    `Relic ${mode === 'daily' ? `— daily ${new Date().toISOString().slice(0, 10)}` : ''}`.trim(),
-    `${formatScore(total)} / ${formatScore(results.length * MAX_ROUND_SCORE)}`,
-    results.map((result) => bandEmoji(result.breakdown.score)).join(''),
-  ].join('\n');
+  const text = buildShareText({
+    scores: results.map((result) => result.breakdown.score),
+    dailyNumber: mode === 'daily' ? dailyNumber() : undefined,
+    modeLabel,
+  });
 
   const copy = async () => {
     try {
@@ -186,22 +190,4 @@ function ShareButton({
       </span>
     </Button>
   );
-}
-
-function bandEmoji(score: number): string {
-  const band = scoreBand(score).id;
-  switch (band) {
-    case 'bullseye':
-      return '🟢';
-    case 'excellent':
-      return '🟩';
-    case 'strong':
-      return '🟨';
-    case 'close':
-      return '🟧';
-    case 'far':
-      return '🟥';
-    default:
-      return '⬛';
-  }
 }

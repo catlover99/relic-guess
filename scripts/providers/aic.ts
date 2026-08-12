@@ -186,6 +186,9 @@ async function normalize(record: AicRecord, context: HarvestContext): Promise<Ar
     material: tidyMaterial(record.medium_display),
     objectType: record.classification_title?.trim() || record.artwork_type_title?.trim() || null,
     origin,
+    // Attached centrally by the ingest once the final origin is known, so the
+    // implausible-drift check can compare the two. See lib/heartland.ts.
+    heartland: null,
     discovery: null,
     heldBy: 'Art Institute of Chicago',
     image: {

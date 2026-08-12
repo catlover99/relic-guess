@@ -8,6 +8,7 @@ produces the one data file the app reads.
 ```
 scripts/                      Node, run by hand or in CI. Never ships to the browser.
 ├── ingest.ts                 Orchestrator: harvest → filter → dedupe → report → write
+├── basemap.ts                Natural Earth → the guessing map (countries, capitals)
 ├── providers/                One adapter per source, each emitting Artifact[]
 │   ├── wikidata.ts           SPARQL, two passes (findspot / creation place)
 │   ├── met.ts                REST, department-weighted sampling
@@ -22,21 +23,23 @@ scripts/                      Node, run by hand or in CI. Never ships to the bro
     ├── dedupe.ts             Within- and cross-provider duplicate removal
     └── text.ts               HTML stripping, summarising, title normalisation
 
-public/data/artifacts.json    The build output. The only data the game loads.
+public/data/artifacts.json    The artifact collection.
+public/data/basemap.json      The guessing map: countries, lakes, capitals.
 
 src/
 ├── data/schema.ts            The normalized Artifact model + runtime validation.
 │                             The single contract between scripts/ and src/.
 ├── game/                     Pure logic, no React
 │   ├── geo.ts                Haversine, bearing, great-circle segments
-│   ├── scoring.ts            Continuous exponential decay with tolerance
+│   ├── scoring.ts            Forgiving stretched-exponential curve with tolerance
+│   ├── share.ts              The spoiler-free result block
 │   ├── selection.ts          Diversity-constrained round selection, difficulty
 │   ├── regions.ts / eras.ts  Macro-region and era classification
 │   ├── random.ts             Seeded PRNG (daily challenge, reproducible tests)
 │   ├── persist.ts            localStorage profile, guarded against failure
 │   └── store.ts              zustand store: the game state machine
 ├── components/
-│   ├── map/                  Vanilla Leaflet behind one component + its own CSS
+│   ├── map/                  Vanilla Leaflet + the Natural Earth atlas layer
 │   ├── screens/              Start, Round, Summary
 │   ├── ui/                   Button, Panel, Chip, Dialog, Skeleton…
 │   └── …                     ArtifactImage, ClueList, RevealPanel, ScoreReveal
@@ -68,6 +71,42 @@ Vite and React were already here and are a good fit; both were kept. The move to
 TypeScript was not cosmetic — the ingestion pipeline and the game share one
 `Artifact` type, and that shared contract is what makes it safe to add a provider
 adapter without reading the UI.
+
+### A baked Natural Earth basemap, not a tile provider
+
+The map is drawn from `public/data/basemap.json` — country outlines, lakes and
+national capitals extracted from Natural Earth at build time — rather than fetched
+from a tile server. Players reported two problems that no keyless raster provider
+can fix:
+
+- **Place names appeared in the local language.** Someone who cannot read Greek
+  was shown "Ελλάδα", which defeats a game about identifying countries.
+- **Labels were unreadable on a phone.** OSM bakes ~11px text into a tile, and
+  Leaflet's `detectRetina` then draws it at half scale.
+
+Every alternative was evaluated and rejected on its own terms: Wikimedia's
+`osm-intl` translates but its policy limits the tiles to Wikimedia-hosted sites;
+Esri's keyless raster basemaps are legacy endpoints Esri documents as removable
+without notice, with no clear commercial licence; vector tiles (OpenFreeMap and
+similar) solve language and clutter but ship 0.6–1.5 MB _per tile_ at the zooms
+this game opens at.
+
+Natural Earth is public domain, carries `NAME_EN` and cartographer-placed label
+anchors, and contains no roads, shops or transit to strip out. The whole world is
+747 KB — 274 KB gzipped, cached once. Consequences:
+
+- **Clutter is impossible rather than filtered.** There is no POI layer to hide.
+- **Label size and density are ours.** Country names are DOM text, so a phone gets
+  _larger_ type (15px vs 13px), crisp at any device pixel ratio, and Natural
+  Earth's own `MIN_LABEL`/`MAX_LABEL` decide what is worth naming at each zoom.
+- **No runtime third-party dependency**, rate limit, tile-usage policy or
+  attribution obligation — the credit shown is a courtesy.
+- **Dark mode needs no filter hack.** Geometry is painted from CSS custom
+  properties (canvas ignores `className`, so the tokens are read via
+  `getComputedStyle` and re-read on theme change).
+
+Geometry goes through Leaflet's own canvas renderer and labels are `divIcon`
+markers, so none of Leaflet's pan/zoom bookkeeping is reimplemented.
 
 ### Vanilla Leaflet, not react-leaflet
 
@@ -101,6 +140,65 @@ a failure that produces a page with every class name present and no styles at al
 The PostCSS integration is unaffected. `@source` globs are declared explicitly for
 the same reason: the automatic crawler returns an empty candidate set on this
 mounted Windows filesystem.
+
+### Scoring is forgiving on purpose
+
+`5000 · e^(−(d/2500)^1.35)`. The original was a plain exponential with a 1,500 km
+scale, which charged 28% of a round for a 500 km miss — but 500 km is _inside_
+several of the cultural regions the game asks about. The exponent above 1 flattens
+the curve through the first few hundred kilometres and keeps the far tail steep, so
+a wrong-continent guess still scores single digits.
+
+| km     | old   | new   |
+| ------ | ----- | ----- |
+| 250    | 4,232 | 4,782 |
+| 500    | 3,583 | 4,462 |
+| 1,000  | 2,567 | 3,740 |
+| 2,000  | 1,318 | 2,386 |
+| 5,000  | 178   | 391   |
+| 10,000 | 6     | 8     |
+
+On top of the curve, two independent radii are forgiven, and the reveal says which
+one applied: the coordinate's own `uncertaintyKm` (the museum's record is vague)
+and the mode's `toleranceKm` (the game only ever asked for the region).
+
+### Heartland and findspot are separate geographic facts
+
+An artifact used to carry one coordinate whose `kind` said whether it was a
+findspot, a production place or a cultural centre. That made them alternatives, so
+a reveal could say where an object was dug up _or_ describe the region the guess
+was graded against — never both.
+
+`Artifact.heartland` is now a separate field alongside `origin`:
+
+| Field       | Claim                                        | Example                               |
+| ----------- | -------------------------------------------- | ------------------------------------- |
+| `origin`    | where _this object_ was found or made        | Milos, Greece                         |
+| `heartland` | where the _culture that made it_ was centred | the Aegean Greek world, 380 km radius |
+
+`game/geography.ts` is the single place that turns those into a round. It answers
+three questions — what was scored, what should be pinned as the object's own
+location, and whether the two differ — and the map, the reveal panel and the
+scorer all read that one answer rather than deriving their own.
+
+A revealed Heartland round therefore shows three distinct things, never collapsed
+into one marker: the guess (teardrop pin), the scored region (flag plus a circle
+whose radius _is_ the scoring rule, always drawn), and the object's own findspot
+(surveyor's stake), when the record has one that is genuinely artifact-specific.
+The distance line connects the guess to the scored centre only — nothing was
+measured to the findspot, and a line would say otherwise.
+
+### Modes set precision, not just clue count
+
+**Heartland** is the default and the daily challenge's mode, and it grades against
+the culture's homeland rather than the object's own findspot — a different
+question, not a looser version of the same one. Artifacts whose culture the curated
+table does not cover fall back to their own recorded place. Most objects in the
+collection have no findspot at all — the honest question for them is "where was
+this culture centred", which is a question about a region a few hundred kilometres
+across — so Heartland forgives 300 km, Scholar 120 km, and Expert scores against
+the recorded coordinate itself. Demanding trench-level precision by default was
+punishing players for the dataset's own imprecision.
 
 ### zustand for game state
 

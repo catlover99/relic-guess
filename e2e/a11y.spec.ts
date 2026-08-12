@@ -106,14 +106,14 @@ test.describe('keyboard operation', () => {
     const map = page.getByRole('application');
     await map.focus();
 
-    const zoomBefore = await page.evaluate(() => document.querySelectorAll('.leaflet-tile').length);
+    const zoom = () =>
+      page.evaluate(() => document.querySelector('[data-map-zoom]')?.getAttribute('data-map-zoom'));
+    const zoomBefore = await zoom();
     await page.keyboard.press('Equal'); // "+"
     await page.waitForTimeout(600);
-    // Zooming re-tiles the map; the exact count is not the point, only that the
-    // keypress reached Leaflet rather than being swallowed.
-    const zoomAfter = await page.evaluate(() => document.querySelectorAll('.leaflet-tile').length);
-    expect(zoomAfter).toBeGreaterThan(0);
-    expect(zoomBefore).toBeGreaterThan(0);
+    // The point is only that the keypress reached Leaflet rather than being
+    // swallowed by the app's own key handling.
+    expect(Number(await zoom())).toBeGreaterThan(Number(zoomBefore));
   });
 
   test('the map announces how to use it', async ({ page }) => {

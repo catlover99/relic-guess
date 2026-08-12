@@ -23,7 +23,8 @@
    ================================================================== */
 
 .leaflet-container {
-  background: var(--surface-inset);
+  /* The ocean. The basemap draws land on top of it, so this *is* the water. */
+  background: var(--atlas-water);
   font-family: var(--font-sans);
   font-size: var(--text-xs);
   /* The map is the primary touch surface: never let a drag scroll the page. */
@@ -44,16 +45,119 @@
   cursor: crosshair;
 }
 
-/**
- * Dark-mode raster tiles.
+/* ==================================================================
+   Atlas basemap
+
+   Palette goals: land and sea separable at a glance, borders legible without
+   dominating, and nothing competing with the two markers. Everything is a token
+   so both themes and the forced-colors path stay consistent.
+   ================================================================== */
+
+:root {
+  --atlas-water: #cfe0ea;
+  --atlas-land: #f2ece1;
+  --atlas-border: #a9a294;
+  --atlas-lake: #cfe0ea;
+  --atlas-label: #4a4336;
+  --atlas-label-halo: #fdfbf6;
+  --atlas-capital: #6d6455;
+}
+
+/*
+ * Dark palette, declared twice and never nested inside a selector block.
  *
- * OSM publishes only a light style, so dark mode inverts it. The hue rotation
- * restores water to blue after the inversion, and the reduced saturation and
- * contrast stop the result glowing against the dark chrome. Markers and the
- * distance line live in other panes and are deliberately not filtered.
+ * The system-preference case and the explicit-toggle case are separate top-level
+ * blocks on purpose: an earlier version nested the media query inside the
+ * selector, which the stylesheet parser rejected and silently dropped *every
+ * rule after it*, taking the 44px zoom-control sizing with it.
  */
-.tiles-inverted .leaflet-tile-pane {
-  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.86) saturate(0.62);
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --atlas-water: #16212b;
+    --atlas-land: #2b2b28;
+    --atlas-border: #5d5a50;
+    --atlas-lake: #16212b;
+    --atlas-label: #ddd5c6;
+    --atlas-label-halo: #14140f;
+    --atlas-capital: #a9a294;
+  }
+}
+
+:root[data-theme='dark'] {
+  --atlas-water: #16212b;
+  --atlas-land: #2b2b28;
+  --atlas-border: #5d5a50;
+  --atlas-lake: #16212b;
+  --atlas-label: #ddd5c6;
+  --atlas-label-halo: #14140f;
+  --atlas-capital: #a9a294;
+}
+
+.atlas-country {
+  fill: var(--atlas-land);
+  stroke: var(--atlas-border);
+}
+
+.atlas-lake {
+  fill: var(--atlas-lake);
+  stroke: var(--atlas-border);
+  stroke-opacity: 0.5;
+}
+
+/*
+ * Labels.
+ *
+ * `divIcon` markers are anchored at their top-left by default; translating by
+ * -50% in both axes centres the text on the country's label anchor. Pointer
+ * events are off so a label can never swallow a tap meant for the map — the
+ * whole placement interaction depends on that.
+ */
+.atlas-label-icon {
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: visible;
+}
+
+.atlas-country-label,
+.atlas-capital {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  pointer-events: none;
+  /* A halo rather than a background box: it keeps the map readable underneath. */
+  paint-order: stroke fill;
+  -webkit-text-stroke: 3px var(--atlas-label-halo);
+}
+
+.atlas-country-label {
+  font-family: var(--font-display, var(--font-sans));
+  /* Set by atlas.ts so the collision maths and the rendered type agree. */
+  font-size: var(--atlas-label-size, 13px);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--atlas-label);
+}
+
+.atlas-capital {
+  transform: translate(6px, -50%);
+  font-size: var(--atlas-capital-size, 11px);
+  font-weight: 500;
+  color: var(--atlas-capital);
+}
+
+.atlas-capital i {
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 50%;
+  background: var(--atlas-capital);
+  -webkit-text-stroke: 0;
 }
 
 .leaflet-control-attribution {
@@ -186,6 +290,22 @@
 }
 
 /* Distance badge anchored to the midpoint of the line. */
+/* Zero-size anchor; the badge inside centres itself on the mid-point. */
+.distance-badge-icon {
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: visible;
+}
+
+.distance-badge-icon .distance-badge {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+
 .distance-badge {
   display: inline-flex;
   align-items: center;
@@ -199,14 +319,4 @@
   white-space: nowrap;
   box-shadow: var(--shadow-md);
   font-variant-numeric: tabular-nums;
-}
-
-.leaflet-tooltip.distance-tooltip {
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-  padding: 0;
-}
-.leaflet-tooltip.distance-tooltip::before {
-  display: none;
 }

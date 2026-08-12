@@ -104,7 +104,26 @@ These are requirements, not courtesies.
 - **Not** "map tiles are guaranteed": the OSM tile policy is explicit that
   availability is best-effort and access may be withdrawn without notice.
 
-## Map tiles
+## The basemap
+
+The guessing map is **Natural Earth** 1:50m — countries, lakes and national
+capitals — extracted by `npm run basemap` into `public/data/basemap.json`.
+
+Natural Earth is in the **public domain**: "no permission is needed to use Natural
+Earth. Crediting the authors is unnecessary." The app credits it anyway, in the
+map's attribution control.
+
+Country names come from the dataset's own `NAME_EN` field and label positions from
+its hand-placed `LABEL_X`/`LABEL_Y` anchors, so English labelling is a property of
+the source data rather than something the app overlays.
+
+Re-run `npm run basemap` to refresh it; the downloaded source files are cached
+under `.cache/basemap`.
+
+## Map tiles (no longer used)
+
+The game no longer requests map tiles from anyone; the section below is kept
+because the reasoning still applies to anyone considering adding a tile layer.
 
 The default basemap is the OSMF standard layer, chosen for **documented
 permission** rather than looks. Compliance requirements, all met:

@@ -4,11 +4,35 @@ import { RevealPanel } from './RevealPanel';
 import { ClueList } from './ClueList';
 import { scoreGuess } from '@/game/scoring';
 import type { RoundResult } from '@/game/store';
-import { makeArtifact, type ArtifactOverrides } from '@/test/factories';
+import { makeArtifact, makeHeartland, type ArtifactOverrides } from '@/test/factories';
+import { roundGeography } from '@/game/geography';
+import { toleranceFor, type DifficultyId } from '@/game/selection';
 
-function makeResult(overrides: ArtifactOverrides = {}, guess = { lat: 30, lon: 30 }): RoundResult {
+/**
+ * A revealed round. `difficulty` decides what the round was graded against, which
+ * is what makes the Heartland rows appear.
+ */
+function makeResult(
+  overrides: ArtifactOverrides = {},
+  guess = { lat: 30, lon: 30 },
+  difficulty: DifficultyId = 'expert',
+): RoundResult {
   const artifact = makeArtifact(overrides);
-  return { artifact, guess, breakdown: scoreGuess(guess, artifact.origin) };
+  const geography = roundGeography(artifact, difficulty);
+  return {
+    artifact,
+    guess,
+    geography,
+    breakdown: scoreGuess(
+      guess,
+      {
+        lat: geography.region.lat,
+        lon: geography.region.lon,
+        uncertaintyKm: geography.region.radiusKm,
+      },
+      { minToleranceKm: toleranceFor(difficulty) },
+    ),
+  };
 }
 
 describe('RevealPanel', () => {
@@ -97,7 +121,7 @@ describe('ClueList', () => {
   it('never names a place before the guess', () => {
     // The whole point of the pre-guess panel is that it cannot leak the answer.
     const artifact = makeArtifact();
-    for (const difficulty of ['explorer', 'scholar', 'expert'] as const) {
+    for (const difficulty of ['heartland', 'scholar', 'expert'] as const) {
       const { container, unmount } = render(
         <ClueList artifact={artifact} difficulty={difficulty} />,
       );
@@ -108,8 +132,8 @@ describe('ClueList', () => {
     }
   });
 
-  it('reveals culture, date and material on Explorer', () => {
-    render(<ClueList artifact={makeArtifact()} difficulty="explorer" />);
+  it('reveals culture, date and material on Heartland', () => {
+    render(<ClueList artifact={makeArtifact()} difficulty="heartland" />);
     expect(screen.getByText('Ancient Egyptian')).toBeInTheDocument();
     expect(screen.getByText('ca. 1473–1458 BCE')).toBeInTheDocument();
     expect(screen.getByText('Granite')).toBeInTheDocument();
@@ -119,7 +143,9 @@ describe('ClueList', () => {
     render(<ClueList artifact={makeArtifact()} difficulty="scholar" />);
     expect(screen.queryByText('Ancient Egyptian')).not.toBeInTheDocument();
     expect(screen.queryByText('ca. 1473–1458 BCE')).not.toBeInTheDocument();
-    expect(screen.getByText('Bronze Age')).toBeInTheDocument();
+    // The era chip carries its span: "Bronze Age" alone dates nothing for a
+    // player who does not already know when the Bronze Age was.
+    expect(screen.getByText('Bronze Age · c. 3000–1200 BCE')).toBeInTheDocument();
   });
 
   it('shows only the object type on Expert', () => {
@@ -131,5 +157,65 @@ describe('ClueList', () => {
   it('explains itself when there is nothing to show', () => {
     render(<ClueList artifact={makeArtifact({ objectType: null })} difficulty="expert" />);
     expect(screen.getByText(/no clues on this difficulty/i)).toBeInTheDocument();
+  });
+});
+
+describe('RevealPanel — heartland rounds', () => {
+  /** Found on Milos; the culture's homeland is 205 km away in Attica. */
+  const exported = {
+    culture: 'Ancient Greek',
+    heartland: makeHeartland({ label: 'the Aegean Greek world' }),
+    origin: {
+      lat: 36.69,
+      lon: 24.43,
+      label: 'Milos, Greece',
+      country: 'Greece',
+      tier: 'site' as const,
+      kind: 'findspot' as const,
+      resolvedBy: 'pleiades' as const,
+    },
+  };
+
+  it('names the heartland as what was scored and the findspot as context', () => {
+    render(<RevealPanel result={makeResult(exported, { lat: 30, lon: 30 }, 'heartland')} />);
+
+    expect(screen.getByText('Cultural heartland')).toBeInTheDocument();
+    expect(screen.getByText('the Aegean Greek world')).toBeInTheDocument();
+    expect(screen.getByText('Found at')).toBeInTheDocument();
+    expect(screen.getByText('Milos, Greece')).toBeInTheDocument();
+    expect(screen.getByText(/did not affect your score/i)).toBeInTheDocument();
+  });
+
+  it('states the radius the guess was graded within', () => {
+    render(<RevealPanel result={makeResult(exported, { lat: 30, lon: 30 }, 'heartland')} />);
+    expect(screen.getByText(/scored within \d+ km/i)).toBeInTheDocument();
+  });
+
+  it('shows no findspot row in a precise mode', () => {
+    render(<RevealPanel result={makeResult(exported, { lat: 30, lon: 30 }, 'expert')} />);
+    expect(screen.queryByText('Cultural heartland')).not.toBeInTheDocument();
+    expect(screen.queryByText('Found at')).not.toBeInTheDocument();
+    // The object's own place is the answer here, stated once.
+    expect(screen.getByText('Milos, Greece')).toBeInTheDocument();
+  });
+
+  it('shows no empty findspot row when the object has no separate location', () => {
+    const culturalOnly = {
+      culture: 'Ancient Greek',
+      heartland: makeHeartland(),
+      origin: {
+        lat: 38.05,
+        lon: 23.8,
+        label: 'the Aegean Greek world',
+        tier: 'culture-region' as const,
+        kind: 'cultural-origin' as const,
+        resolvedBy: 'culture' as const,
+      },
+    };
+    render(<RevealPanel result={makeResult(culturalOnly, { lat: 30, lon: 30 }, 'heartland')} />);
+
+    expect(screen.getByText('Cultural heartland')).toBeInTheDocument();
+    expect(screen.queryByText('Found at')).not.toBeInTheDocument();
+    expect(screen.queryByText('Excavated at')).not.toBeInTheDocument();
   });
 });
