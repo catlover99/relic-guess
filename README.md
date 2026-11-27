@@ -1,3 +1,5 @@
+https://www.relicguess.com/
+
 # Relic
 
 A geography game for people who like history. You get a photograph of an ancient
